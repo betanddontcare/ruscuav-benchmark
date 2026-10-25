@@ -1,0 +1,20 @@
+{
+  "description": "Canonical-world missions of the RUSCUAV v2.0.0 primary evaluation, recorded from the legacy env.reset(seed).",
+  "world_id": "AOI_SYNTH_000",
+  "legacy_world_id": "AOI_FAKE_001",
+  "seeds": [
+    5000,
+    5199
+  ],
+  "environment": "make_ruscuav_env_m4_mode(stage='B', mode='strict_eval', risk_profile='balanced', n_obstacles=0)",
+  "variants_cross_checked": [
+    "GEO-RL",
+    "OBS-RL",
+    "RISK+GREEN-RL",
+    "RISK+OBS-RL"
+  ],
+  "archived_planned_paths_checked": 200,
+  "problems": [],
+  "z_note": "start_z/target_z are absolute altitudes in metres, in the same height frame as the world's terrain_z.",
+  "created_at": "2026-10-25T08:35:37+00:00"
+}

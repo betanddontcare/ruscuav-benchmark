@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased (2.1.0.dev0)
+
+- Legacy notebook code runs outside Colab: `ruscuav_benchmark.legacy.runtime` and
+  `scripts/legacy_parity.py`, which reproduces archived primary episodes
+  (see docs/REPRODUCIBILITY.md).
+- World files are opened with `allow_pickle=False`; worlds from untrusted sources can
+  no longer execute code when loaded.
+- World NPZ schema `ruscuav-world/1.0` (docs/WORLD_NPZ_SCHEMA.md): `schema_version` and
+  optional `meta_json` provenance; `ruscuav validate` checks files against it.
+- New `ruscuav` command (`validate`, `evaluate`); `ruscuav-evaluate` is unchanged.
+- The canonical world `AOI_FAKE_001` is renamed `AOI_SYNTH_000` and its CRS label
+  corrected from `EPSG:2180` to `LOCAL_METRIC_SYNTHETIC`; the old ID still resolves.
+  The four synthetic worlds are now part of the repository (layers unchanged).
+- Canonical-world missions for seeds 5000–5199 recorded in
+  `scenarios/canonical/AOI_SYNTH_000_seed5000_n200.csv`.
+- The quickstart example runs from a repository checkout.
+- One package version, read from `ruscuav_benchmark.__version__`.
+
 ## 2.0.0 — 2026-07-24
 
 Major reproducibility and evaluation-protocol release.
