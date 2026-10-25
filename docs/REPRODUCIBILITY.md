@@ -65,8 +65,9 @@ the archived checkpoints):
 | Method | Episodes (seeds) | Result |
 |---|---|---|
 | STATIC_Astar | 13 (5000–5004, 5100–5107) | Identical: the re-run CSV rows match the archived rows character for character, apart from the episode counter and planning wall-clock times. |
-| LOCAL_RH_Astar, FULL_RH_Astar | 5 each (5000–5004) | Identical, as above. |
-| PPO RISK+GREEN-RL (train seed 4001), GEO-RL (1001), OBS-RL (2001) | 5, 5, 3 | Termination, success, acceptability, step counts and exposure times identical; cumulative risk equal to within 4e-15; positions within 0.2 mm; total reward within 0.003. |
+| LOCAL_RH_Astar | 11 (5000–5004, 5194–5199) | Identical, as above. |
+| FULL_RH_Astar | 10 (5000–5004, 5195–5199) | Identical, as above. |
+| PPO RISK+GREEN-RL (train seed 4001), GEO-RL (1001), OBS-RL (2001), RISK+OBS-RL (single checkpoint) | 5, 5, 3, 3 (from 5000) | Termination, success, acceptability, step counts and exposure times identical; cumulative risk equal to within 4e-15; positions within 0.2 mm; total reward within 0.003. |
 
 The PPO position differences come from float32 arithmetic in the policy network:
 the archive was produced with the CPU-only PyTorch wheel, the check used the CUDA
