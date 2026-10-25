@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ruscuav-benchmark"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Semantic mission-acceptability benchmark for low-altitude urban cargo-UAV navigation"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -24,10 +24,14 @@ dependencies = [
 Homepage = "https://zenodo.org/"
 
 [project.scripts]
+ruscuav = "ruscuav_benchmark.cli:main"
 ruscuav-evaluate = "ruscuav_benchmark.evaluate:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
+
+[tool.setuptools.dynamic]
+version = {attr = "ruscuav_benchmark.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
