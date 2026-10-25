@@ -225,23 +225,31 @@ class UrbanWorldLayers:
                     f"{path}: not a RUSCUAV world file; missing keys: {', '.join(missing)}. "
                     "Run `ruscuav validate` for details."
                 )
-            try:
-                arrays = {key: data[key] for key in data.files}
-            except ValueError as exc:  # object arrays need pickle, which is refused
-                raise ValueError(
-                    f"{path}: contains pickled Python objects, which are not allowed in "
-                    "world files. Store strings and metadata as plain NumPy arrays."
-                ) from exc
+            arrays: Dict[str, Any] = {}
+            for key in data.files:
+                try:
+                    arrays[key] = data[key]
+                except ValueError as exc:
+                    if "allow_pickle" in str(exc):  # object arrays need pickle, which is refused
+                        raise ValueError(
+                            f"{path}: {key!r} contains pickled Python objects, which are not allowed "
+                            "in world files. Store strings and metadata as plain NumPy arrays."
+                        ) from exc
+                    raise ValueError(f"{path}: {key!r} could not be read ({exc})") from exc
+                if not isinstance(arrays[key], np.ndarray):
+                    raise ValueError(f"{path}: {key!r} is not a NumPy array")
 
         def get_str(key: str) -> str:
             value = arrays[key]
             return str(value.item()) if value.shape == () else str(value)
 
+        if np.shape(arrays["bbox"]) != (4,):
+            raise ValueError(f"{path}: bbox must have shape (4,); got {np.shape(arrays['bbox'])}")
         kwargs: Dict[str, Any] = {
             "aoi_id": get_str("aoi_id"),
             "crs": get_str("crs"),
             "bbox": tuple(float(x) for x in arrays["bbox"]),
-            "resolution_m": float(arrays["resolution_m"]),
+            "resolution_m": float(np.asarray(arrays["resolution_m"]).reshape(())),
         }
         for key in REQUIRED_LAYER_KEYS:
             kwargs[key] = arrays[key]
@@ -251,7 +259,10 @@ class UrbanWorldLayers:
         if "schema_version" in arrays:
             kwargs["schema_version"] = get_str("schema_version")
         if "meta_json" in arrays:
-            kwargs["meta"] = json.loads(get_str("meta_json"))
+            try:
+                kwargs["meta"] = json.loads(get_str("meta_json"))
+            except ValueError as exc:
+                raise ValueError(f"{path}: meta_json is not valid JSON ({exc})") from exc
         return UrbanWorldLayers(**kwargs)
 
 

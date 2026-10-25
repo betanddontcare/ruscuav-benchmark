@@ -4,7 +4,8 @@
 The raster layers are copied unchanged. The output adds ``schema_version`` and a
 ``meta_json`` provenance record (source file name and SHA-256, previous world ID),
 and can rename the world or correct its CRS label. The script refuses to write a
-file that fails ``ruscuav validate``.
+file whose layers, bbox or resolution differ from the input in value or dtype
+(compared on the raw files), or that fails ``ruscuav validate``.
 
 Example (canonical world of RUSCUAV v2.0.0)::
 
@@ -28,7 +29,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from ruscuav_benchmark.validate import validate_world_npz  # noqa: E402
-from ruscuav_benchmark.world import REQUIRED_LAYER_KEYS, WORLD_SCHEMA_VERSION, UrbanWorldLayers  # noqa: E402
+from ruscuav_benchmark.world import (  # noqa: E402
+    OPTIONAL_LAYER_KEYS,
+    REQUIRED_LAYER_KEYS,
+    WORLD_SCHEMA_VERSION,
+    UrbanWorldLayers,
+)
 
 
 def sha256_file(path: Path) -> str:
@@ -37,6 +43,21 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def changed_arrays(original: Path, upgraded: Path) -> list[str]:
+    """Names of layers, bbox or resolution that differ between two raw NPZ files."""
+    changed = []
+    with np.load(original, allow_pickle=False) as a, np.load(upgraded, allow_pickle=False) as b:
+        keys = [k for k in REQUIRED_LAYER_KEYS + OPTIONAL_LAYER_KEYS + ("bbox", "resolution_m") if k in a.files]
+        for key in keys:
+            if key not in b.files:
+                changed.append(f"{key} (missing)")
+                continue
+            x, y = a[key], b[key]
+            if x.dtype != y.dtype or x.shape != y.shape or not np.array_equal(x, y):
+                changed.append(f"{key} ({x.dtype}{list(x.shape)} -> {y.dtype}{list(y.shape)})")
+    return changed
 
 
 def main() -> int:
@@ -66,13 +87,14 @@ def main() -> int:
         schema_version=WORLD_SCHEMA_VERSION,
         meta=meta,
     )
-    for key in REQUIRED_LAYER_KEYS:  # layers must come through bit-for-bit
-        if not np.array_equal(getattr(world, key), getattr(source, key)):
-            raise RuntimeError(f"layer {key} changed during upgrade")
-
     args.output.parent.mkdir(parents=True, exist_ok=True)
     tmp = args.output.with_name(args.output.stem + ".tmp.npz")
     world.save_npz(tmp)
+    changed = changed_arrays(args.input, tmp)
+    if changed:
+        tmp.unlink()
+        print(f"Refusing to write {args.output}: the upgrade would change {', '.join(changed)}")
+        return 1
     report = validate_world_npz(tmp)
     if not report.ok:
         tmp.unlink()

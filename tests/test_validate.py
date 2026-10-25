@@ -126,3 +126,48 @@ def test_bundled_worlds_are_valid(path):
     report = validate_world_npz(path)
     assert report.ok, report.errors
     assert report.warnings == []
+
+
+def _corrupt_member(path, payload, compressed):
+    (np.savez_compressed if compressed else np.savez)(path, **payload)
+    import zipfile
+    data = bytearray(path.read_bytes())
+    with zipfile.ZipFile(path) as z:
+        info = z.getinfo("terrain_z.npy")
+    offset = info.header_offset + 30 + len(info.filename) + len(info.extra) + info.compress_size // 2
+    for i in range(8):
+        data[offset + i] ^= 0xFF
+    path.write_bytes(bytes(data))
+
+
+def _non_npy_member(path, payload):
+    import zipfile
+    payload = dict(payload)
+    del payload["aoi_id"]
+    np.savez(path, **payload)
+    with zipfile.ZipFile(path, "a") as z:
+        z.writestr("aoi_id", "TEST")
+
+
+MALFORMED = {
+    "empty_file": lambda p, d: p.write_bytes(b""),
+    "plain_npy": lambda p, d: np.save(open(p, "wb"), np.zeros((3, 3))),
+    "zero_size_layers": lambda p, d: np.savez(p, **{k: (np.zeros((0, 0), np.float32) if getattr(v, "ndim", 0) == 2 else v) for k, v in d.items()}),
+    "bad_meta_json": lambda p, d: np.savez(p, **{**d, "meta_json": np.array("{not json")}),
+    "meta_json_not_object": lambda p, d: np.savez(p, **{**d, "meta_json": np.array("[1, 2]")}),
+    "bbox_2x2": lambda p, d: np.savez(p, **{**d, "bbox": np.array([[0.0, 0.0], [120.0, 120.0]])}),
+    "aoi_id_not_scalar": lambda p, d: np.savez(p, **{**d, "aoi_id": np.array(["TEST"])}),
+    "resolution_text": lambda p, d: np.savez(p, **{**d, "resolution_m": np.array("one metre")}),
+    "non_npy_member": _non_npy_member,
+    "corrupt_member_stored": lambda p, d: _corrupt_member(p, d, False),
+    "corrupt_member_compressed": lambda p, d: _corrupt_member(p, d, True),
+}
+
+
+@pytest.mark.parametrize("case", sorted(MALFORMED))
+def test_malformed_files_are_reported_not_raised(tmp_path, payload, case):
+    path = tmp_path / f"{case}.npz"
+    MALFORMED[case](path, payload)
+    report = validate_world_npz(path)  # must not raise
+    assert not report.ok
+    assert all("pickled" not in e for e in report.errors), report.errors

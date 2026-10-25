@@ -82,38 +82,61 @@ def _as_text(value) -> str:
 
 
 def compare_episodes(archived: pd.DataFrame, rerun: pd.DataFrame, atol: float, rtol: float = 0.0) -> dict:
-    """Compare shared columns seed by seed: numbers within atol + rtol*|archived|, text exactly."""
+    """Compare a re-run with the archive, matching rows by seed.
+
+    Integer columns (counts, steps), booleans and text must match exactly; other
+    numbers must agree within atol + rtol*|archived|. A column present on only one
+    side (apart from IGNORED_COLUMNS) fails the comparison.
+    """
     archived = archived.set_index("seed")
     rerun = rerun.set_index("seed")
     columns = [c for c in rerun.columns if c in archived.columns and c not in IGNORED_COLUMNS]
-    mismatches, max_abs_diff, exact_seeds = [], {}, set(rerun.index)
+    only_rerun = sorted(set(rerun.columns) - set(archived.columns) - IGNORED_COLUMNS)
+    only_archive = sorted(set(archived.columns) - set(rerun.columns) - IGNORED_COLUMNS)
+    exact_columns = {c for c in columns if archived[c].dtype.kind in "iub"}
+
+    mismatches, max_abs_diff, inexact = [], {}, set()
+    for col in only_archive + only_rerun:
+        mismatches.append({
+            "seed": None, "column": col,
+            "archived": "present" if col in only_archive else "missing",
+            "rerun": "present" if col in only_rerun else "missing",
+        })
     for seed in rerun.index:
         if seed not in archived.index:
+            inexact.add(seed)
             mismatches.append({"seed": int(seed), "column": "<row>", "archived": "missing", "rerun": "present"})
             continue
         for col in columns:
             a, b = archived.at[seed, col], rerun.at[seed, col]
             fa, fb = _as_float(a), _as_float(b)
             if fa is not None and fb is not None:
-                if math.isnan(fa) and math.isnan(fb):
+                if fa == fb or (math.isnan(fa) and math.isnan(fb)):
                     continue
                 diff = abs(fa - fb)
+                if math.isnan(diff):  # exactly one side is NaN
+                    diff = math.inf
                 max_abs_diff[col] = max(max_abs_diff.get(col, 0.0), diff)
                 if diff > atol:
-                    exact_seeds.discard(seed)
-                if not diff <= atol + rtol * abs(fa):
+                    inexact.add(seed)
+                tolerance = atol if col in exact_columns else atol + rtol * abs(fa)
+                if not diff <= tolerance:
                     mismatches.append({"seed": int(seed), "column": col, "archived": a, "rerun": b})
             elif _as_text(a) != _as_text(b):
-                exact_seeds.discard(seed)
+                inexact.add(seed)
                 mismatches.append({"seed": int(seed), "column": col, "archived": str(a), "rerun": str(b)})
+
+    structural = bool(only_archive or only_rerun)
+    seeds = set(rerun.index)
     return {
         "episodes_compared": int(len(rerun)),
         "columns_compared": columns,
-        "columns_not_compared": sorted(set(rerun.columns) - set(columns)),
+        "columns_only_in_archive": only_archive,
+        "columns_only_in_rerun": only_rerun,
         "mismatches": mismatches,
         "max_abs_diff": {k: v for k, v in sorted(max_abs_diff.items()) if v > 0},
-        "episodes_fully_matching": int(len(set(rerun.index) - {m["seed"] for m in mismatches})),
-        "episodes_exact_within_atol": int(len(exact_seeds)),
+        "episodes_fully_matching": 0 if structural else int(len(seeds - {m["seed"] for m in mismatches})),
+        "episodes_exact_within_atol": 0 if structural else int(len(seeds - inexact)),
     }
 
 
@@ -166,8 +189,8 @@ def main() -> int:
     p.add_argument("--seed0", type=int, default=5000, help="First scenario seed (planners)")
     p.add_argument("--atol", type=float, default=1e-9, help="absolute tolerance for numeric values")
     p.add_argument("--rtol", type=float, default=1e-5,
-                   help="relative tolerance; absorbs float32 differences between PyTorch builds "
-                        "(discrete outcomes, counts and exposure times still have to match)")
+                   help="relative tolerance for non-integer numbers; absorbs float32 differences between "
+                        "PyTorch builds. Integer columns, booleans and text always have to match exactly.")
     p.add_argument("--rerun-csv", type=Path, default=None,
                    help="compare an existing re-run CSV instead of running episodes again")
     args = p.parse_args()

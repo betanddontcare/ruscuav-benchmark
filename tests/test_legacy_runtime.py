@@ -25,6 +25,29 @@ def test_path_rewriting():
     assert '"/tmp/vd/worlds/x.npz"' in out and '"/tmp/local/ruscuav/data"' in out and '"/tmp/local/data"' in out
 
 
+def test_path_rewriting_is_single_pass_and_respects_boundaries():
+    text = 'a = "/content/drive/MyDrive/RUSCUAV/w.npz"\nb = "/content/ruscuav/x"\nc = "/content/database"\n'
+    out = runtime.rewrite_paths(text, Path("/content/ruscuav_work/drive"), Path("/content/data_x/local"))
+    assert '"/content/ruscuav_work/drive/w.npz"' in out  # not rewritten a second time
+    assert '"/content/data_x/local/ruscuav/x"' in out
+    assert '"/content/database"' in out  # /content/data only matches a whole path component
+
+
+def test_virtual_drive_copies_inputs(tmp_path):
+    archive = tmp_path / "archive"
+    for rel in runtime.ARCHIVE_TO_DRIVE:
+        (archive / rel).parent.mkdir(parents=True, exist_ok=True)
+        (archive / rel).write_bytes(b"original")
+    drive = runtime.prepare_virtual_drive(archive, tmp_path / "drive")
+    for rel, drive_rel in runtime.ARCHIVE_TO_DRIVE.items():
+        target = drive / drive_rel
+        assert not target.is_symlink()
+        target.write_bytes(b"changed by legacy code")
+        assert (archive / rel).read_bytes() == b"original"
+    runtime.prepare_virtual_drive(archive, tmp_path / "drive")  # refreshes the copy
+    assert all((drive / d).read_bytes() == b"original" for d in runtime.ARCHIVE_TO_DRIVE.values())
+
+
 def test_state_patches_keep_line_numbers():
     source = runtime.DEFINITIONS_PATH.read_text(encoding="utf-8")
     patched = runtime.apply_notebook_state_patches(source)

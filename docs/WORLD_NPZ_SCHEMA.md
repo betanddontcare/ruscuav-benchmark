@@ -55,8 +55,12 @@ Masks should be binary. Fractional values are allowed but thresholded at 0.5 on 
 
 Errors (the world cannot be used):
 
-- missing required keys, pickled objects, unsupported `schema_version`;
-- layers that are not 2-D, differ in shape, are non-numeric, or contain NaN/inf;
+- unreadable or truncated archives, members that are not NumPy arrays, pickled
+  objects, missing required keys, unsupported `schema_version`;
+- metadata that are not 0-d arrays of the right kind (`aoi_id`, `crs`,
+  `schema_version` and `meta_json` strings; `resolution_m` a number), a `bbox` that is
+  not 4 numbers, or a `meta_json` that is not a JSON object;
+- layers that are not 2-D, are empty, differ in shape, are non-numeric, or contain NaN/inf;
 - masks outside [0, 1]; `bbox` or `resolution_m` invalid or inconsistent with the grid;
 - derived layers that disagree with their base layers by more than 1 mm
   (`height_above_ground`, `building_roof_z`, `canopy_top_z`); `canopy_density` outside [0, 1];

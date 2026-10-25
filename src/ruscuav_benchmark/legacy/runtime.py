@@ -9,14 +9,17 @@ namespace and read and write a mounted Google Drive
   ``globals()`` lookups in the legacy code behave as they did in Colab;
 * hard-coded Drive and Colab paths are rewritten to a local "virtual drive" before
   execution (the source files on disk are not modified);
-* the virtual drive exposes the archived inputs from an extracted Zenodo archive in
-  the directory layout the notebook expected, and receives all new outputs.
-
-The archived inputs are only read; nothing is written into the archive.
+* the virtual drive holds copies of the archived inputs from an extracted Zenodo
+  archive, in the directory layout the notebook expected, and receives all new
+  outputs. Because inputs are copied, legacy code that writes to Drive cannot
+  change the archive.
 """
 
 from __future__ import annotations
 
+import filecmp
+import re
+import shutil
 import sys
 import types
 from pathlib import Path
@@ -85,7 +88,7 @@ def apply_notebook_state_patches(source: str) -> str:
 
 
 def prepare_virtual_drive(archive_root: str | Path, drive_root: str | Path) -> Path:
-    """Create the Drive layout the notebook expected, linking archived inputs read-only."""
+    """Create the Drive layout the notebook expected, with copies of the archived inputs."""
     archive_root = Path(archive_root).resolve()
     drive_root = Path(drive_root).resolve()
     drive_root.mkdir(parents=True, exist_ok=True)
@@ -98,20 +101,29 @@ def prepare_virtual_drive(archive_root: str | Path, drive_root: str | Path) -> P
             )
         target = drive_root / drive_rel
         target.parent.mkdir(parents=True, exist_ok=True)
-        if target.is_symlink() or target.exists():
-            if target.resolve() == source:
-                continue
-            raise FileExistsError(f"{target} exists and does not point to {source}")
-        target.symlink_to(source)
+        if target.is_symlink():
+            target.unlink()
+        if target.exists() and filecmp.cmp(source, target, shallow=False):
+            continue
+        shutil.copyfile(source, target)  # a copy, so writes in the drive never reach the archive
     return drive_root
 
 
 def rewrite_paths(source: str, drive_root: Path, colab_local_root: Path) -> str:
-    """Replace hard-coded Drive and Colab paths in legacy source text."""
-    source = source.replace(DRIVE_LITERAL, drive_root.as_posix())
+    """Replace hard-coded Drive and Colab paths in legacy source text.
+
+    All literals are replaced in one pass, so a replacement path that itself contains
+    a literal (for example a work folder under /content/ruscuav_work) is left alone.
+    A literal only matches as a whole path component: /content/data does not match
+    /content/database.
+    """
+    replacements = {DRIVE_LITERAL: drive_root.as_posix()}
     for literal in COLAB_LOCAL_LITERALS:
-        source = source.replace(literal, (colab_local_root / Path(literal).name).as_posix())
-    return source
+        replacements[literal] = (colab_local_root / Path(literal).name).as_posix()
+    pattern = re.compile(
+        "(?:" + "|".join(re.escape(k) for k in sorted(replacements, key=len, reverse=True)) + r")(?![\w.-])"
+    )
+    return pattern.sub(lambda m: replacements[m.group(0)], source)
 
 
 def load_legacy_namespace(
@@ -149,7 +161,9 @@ def load_legacy_namespace(
         text = rewrite_paths(path.read_text(encoding="utf-8"), drive_root, colab_local_root)
         if path == DEFINITIONS_PATH:
             text = apply_notebook_state_patches(text)
-        exec(compile(text, str(path), "exec"), module.__dict__)
+        # dont_inherit: do not pass this module's `from __future__ import annotations`
+        # to the legacy code, which ran without it in Colab.
+        exec(compile(text, str(path), "exec", dont_inherit=True), module.__dict__)
 
     module.RUSCUAV_VIRTUAL_DRIVE = drive_root
     module.RUSCUAV_ARCHIVE_ROOT = Path(archive_root).resolve()
