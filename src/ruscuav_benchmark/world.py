@@ -7,6 +7,32 @@ from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 
+#: Version of the world NPZ layout written by :meth:`UrbanWorldLayers.save_npz`.
+#: See docs/WORLD_NPZ_SCHEMA.md.
+WORLD_SCHEMA_VERSION = "ruscuav-world/1.0"
+
+#: World identifiers used in earlier releases, mapped to their current names.
+#: AOI_FAKE_001 is the canonical synthetic world of RUSCUAV v2.0.0 and earlier.
+LEGACY_AOI_ALIASES: Dict[str, str] = {"AOI_FAKE_001": "AOI_SYNTH_000"}
+
+
+def canonical_aoi_id(aoi_id: str) -> str:
+    """Return the current identifier for ``aoi_id``, resolving legacy aliases."""
+    return LEGACY_AOI_ALIASES.get(str(aoi_id), str(aoi_id))
+
+
+#: Array keys every world NPZ must contain.
+REQUIRED_SCALAR_KEYS = ("aoi_id", "crs", "bbox", "resolution_m")
+REQUIRED_LAYER_KEYS = (
+    "terrain_z", "surface_z", "height_above_ground",
+    "building_mask", "building_height", "building_roof_z",
+    "road_mask", "sidewalk_mask", "green_mask",
+    "canopy_mask", "canopy_height", "canopy_top_z", "canopy_density",
+    "sensitive_mask",
+)
+OPTIONAL_LAYER_KEYS = ("water_mask", "railway_mask", "parking_mask")
+OPTIONAL_METADATA_KEYS = ("schema_version", "meta_json")
+
 
 @dataclass
 class AOIManifestEntry:
@@ -89,6 +115,11 @@ class UrbanWorldLayers:
     railway_mask: Optional[np.ndarray] = None
     parking_mask: Optional[np.ndarray] = None
 
+    #: Schema of the file the world was loaded from (None for files older than 1.0).
+    schema_version: Optional[str] = None
+    #: Free-form provenance metadata, stored in the NPZ as a JSON string.
+    meta: Optional[Dict[str, Any]] = None
+
     def __post_init__(self) -> None:
         self.bbox = tuple(float(x) for x in self.bbox)
         self.resolution_m = float(self.resolution_m)
@@ -145,6 +176,7 @@ class UrbanWorldLayers:
 
     def to_npz_dict(self) -> Dict[str, np.ndarray]:
         d: Dict[str, np.ndarray] = {
+            "schema_version": np.array(WORLD_SCHEMA_VERSION),
             "aoi_id": np.array(self.aoi_id),
             "crs": np.array(self.crs),
             "bbox": np.array(self.bbox, dtype=np.float64),
@@ -164,10 +196,12 @@ class UrbanWorldLayers:
             "canopy_density": self.canopy_density,
             "sensitive_mask": self.sensitive_mask,
         }
-        for optional in ["water_mask", "railway_mask", "parking_mask"]:
+        for optional in OPTIONAL_LAYER_KEYS:
             arr = getattr(self, optional)
             if arr is not None:
                 d[optional] = arr
+        if self.meta:
+            d["meta_json"] = np.array(json.dumps(self.meta, ensure_ascii=False, sort_keys=True))
         return d
 
     def save_npz(self, path: str | Path) -> str:
@@ -178,35 +212,46 @@ class UrbanWorldLayers:
 
     @staticmethod
     def load_npz(path: str | Path) -> "UrbanWorldLayers":
-        data = np.load(path, allow_pickle=True)
+        """Load a world NPZ.
+
+        Files are opened with ``allow_pickle=False``, so a world file cannot execute
+        code when it is loaded. Use ``ruscuav validate`` for a full report on a file
+        that fails to load.
+        """
+        with np.load(path, allow_pickle=False) as data:
+            missing = [k for k in REQUIRED_SCALAR_KEYS + REQUIRED_LAYER_KEYS if k not in data.files]
+            if missing:
+                raise ValueError(
+                    f"{path}: not a RUSCUAV world file; missing keys: {', '.join(missing)}. "
+                    "Run `ruscuav validate` for details."
+                )
+            try:
+                arrays = {key: data[key] for key in data.files}
+            except ValueError as exc:  # object arrays need pickle, which is refused
+                raise ValueError(
+                    f"{path}: contains pickled Python objects, which are not allowed in "
+                    "world files. Store strings and metadata as plain NumPy arrays."
+                ) from exc
 
         def get_str(key: str) -> str:
-            value = data[key]
+            value = arrays[key]
             return str(value.item()) if value.shape == () else str(value)
 
-        kwargs = {
+        kwargs: Dict[str, Any] = {
             "aoi_id": get_str("aoi_id"),
             "crs": get_str("crs"),
-            "bbox": tuple(float(x) for x in data["bbox"]),
-            "resolution_m": float(data["resolution_m"]),
-            "terrain_z": data["terrain_z"],
-            "surface_z": data["surface_z"],
-            "height_above_ground": data["height_above_ground"],
-            "building_mask": data["building_mask"],
-            "building_height": data["building_height"],
-            "building_roof_z": data["building_roof_z"],
-            "road_mask": data["road_mask"],
-            "sidewalk_mask": data["sidewalk_mask"],
-            "green_mask": data["green_mask"],
-            "canopy_mask": data["canopy_mask"],
-            "canopy_height": data["canopy_height"],
-            "canopy_top_z": data["canopy_top_z"],
-            "canopy_density": data["canopy_density"],
-            "sensitive_mask": data["sensitive_mask"],
+            "bbox": tuple(float(x) for x in arrays["bbox"]),
+            "resolution_m": float(arrays["resolution_m"]),
         }
-        for optional in ["water_mask", "railway_mask", "parking_mask"]:
-            if optional in data.files:
-                kwargs[optional] = data[optional]
+        for key in REQUIRED_LAYER_KEYS:
+            kwargs[key] = arrays[key]
+        for optional in OPTIONAL_LAYER_KEYS:
+            if optional in arrays:
+                kwargs[optional] = arrays[optional]
+        if "schema_version" in arrays:
+            kwargs["schema_version"] = get_str("schema_version")
+        if "meta_json" in arrays:
+            kwargs["meta"] = json.loads(get_str("meta_json"))
         return UrbanWorldLayers(**kwargs)
 
 
