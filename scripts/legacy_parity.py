@@ -3,8 +3,9 @@
 compare the per-episode results with the archived CSVs.
 
 The legacy code is loaded outside Colab with ``ruscuav_benchmark.legacy.runtime``.
-Episodes are re-run with the exact configuration of the archived primary
-no-terminal runs, then every shared column is compared episode by episode.
+Episodes are re-run with the exact configuration of the archived runs (primary
+no-terminal planners and PPO policies, strict reward-factor evaluations), then every
+shared column is compared episode by episode.
 
 Examples::
 
@@ -12,6 +13,13 @@ Examples::
         --method STATIC_Astar --episodes 5
     python scripts/legacy_parity.py --archive /data/RUSCUAV-v2.0.0 --work runs/parity \
         --method PPO:RISK+GREEN-RL:4001 --episodes 5
+    python scripts/legacy_parity.py --archive /data/RUSCUAV-v2.0.0 --work runs/parity \
+        --method REWARD_FACTOR:risk_only:1001 --episodes 3
+
+With ``--env refactored`` the legacy evaluation code drives the refactored
+environment (ruscuav_benchmark.env) instead of the notebook classes: the
+notebook's environment factories are replaced by those of
+ruscuav_benchmark.env.legacy_factories before the episodes run.
 
 Requires the reproducibility dependencies (requirements-reproducibility.txt).
 Exit code 0 means every compared value matched within the tolerance.
@@ -62,10 +70,30 @@ REAL_WORLD_DRIVE_NAMES = {
     "warsaw": "worlds/warsaw_centrum_osm_1km_v1_urban_world_layers.npz",
 }
 PPO_ARCHIVE = "experiments/paperA_submission_repair_v1/primary_no_terminal/static/{method}/{run}"
+#: Strict (stage C) evaluations of the reward-factor ablation (RISK-RL = risk_only,
+#: GREEN-RL = green_only), episodes from seed 5000.
+REWARD_FACTOR_ARCHIVE = "experiments/paperA_reward_factor_{variant}_seed{seed}"
+REWARD_FACTOR_PREFIX = "paperA_reward_factor_{variant}_trainseed{seed}_strict_eval_200"
 
 #: Not compared: wall-clock measurements differ between machines, and "episode" is a
 #: run-local counter (rows are matched by seed, so a run may start at any seed).
 IGNORED_COLUMNS = {"episode", "total_plan_time_s", "mean_plan_time_s", "last_plan_time_s"}
+
+#: Notebook environment factories replaced by --env refactored.
+ENV_FACTORIES = (
+    "make_ruscuav_env_m4", "make_ruscuav_env_m4_mode", "make_ruscuav_m8_ablation_env_m4_mode",
+    "make_ruscuav_geo_baseline_env_m4_mode",
+    "make_ruscuav_env_m11_dynamic_mode", "make_ruscuav_env_m11c_dynamic_obs_mode", "make_m12c_real_vienna_env_mode",
+    "make_geo_eval_env", "make_static_eval_env",
+)
+
+
+def use_refactored_env(ns) -> None:
+    """Make the legacy evaluation code create ruscuav_benchmark.env environments."""
+    from ruscuav_benchmark.env import legacy_factories
+
+    for name in ENV_FACTORIES:
+        setattr(ns, name, getattr(legacy_factories, name))
 
 
 def sha256_file(path: Path) -> str:
@@ -215,13 +243,41 @@ def run_ppo(ns, world, method: str, run: str, n: int, archive: Path, work: Path)
     return archived, rerun, {"rerun_csv": str(csv_path), "model_path": str(model_path), "model_sha256": actual_sha}
 
 
+def reward_factor_paths(archive: Path, variant: str, seed: int) -> tuple[Path, Path]:
+    exp = archive / REWARD_FACTOR_ARCHIVE.format(variant=variant, seed=seed)
+    prefix = REWARD_FACTOR_PREFIX.format(variant=variant, seed=seed)
+    return exp / "models" / f"ppo_ruscuav_m4_after_stage_M8_{variant}_C.zip", exp / "eval" / prefix / f"{prefix}_episodes.csv"
+
+
+def run_reward_factor(ns, world, variant: str, seed: int, n: int, archive: Path,
+                      work: Path) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+    """Re-run the first episodes of a reward-factor evaluation with the notebook's rollout."""
+    from stable_baselines3 import PPO
+
+    model_path, archived_csv = reward_factor_paths(archive, variant, seed)
+    model = PPO.load(str(model_path), device="cpu")
+    rows = []
+    for episode in range(n):
+        row, _ = ns.rollout_m8_ablation_eval_episode(
+            model=model, world=world, variant_name=variant, seed=5000 + episode, stage="C", mode="strict_eval",
+            n_obstacles=0, deterministic=True, max_steps=1000,
+        )
+        row["episode"] = episode
+        rows.append(row)
+    csv_path = work / "reward_factor" / f"{variant}_trainseed{seed}_{int(time.time())}_episodes.csv"
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(rows).to_csv(csv_path, index=False)
+    return read_csv(archived_csv), read_csv(csv_path), {"rerun_csv": str(csv_path), "model_path": str(model_path)}
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     p.add_argument("--archive", required=True, type=Path, help="Extracted RUSCUAV-v2.0.0 Zenodo archive")
     p.add_argument("--work", required=True, type=Path, help="Writable work directory")
     p.add_argument("--method", required=True,
                    help="STATIC_Astar | LOCAL_RH_Astar | FULL_RH_Astar | VIENNA_FULL_RH_Astar | "
-                        "WARSAW_FULL_RH_Astar | PPO:<method>:<train seed or 'single'>")
+                        "WARSAW_FULL_RH_Astar | PPO:<method>:<train seed or 'single'> | "
+                        "REWARD_FACTOR:<risk_only|green_only>:<train seed>")
     p.add_argument("--episodes", type=int, default=5)
     p.add_argument("--seed0", type=int, default=None,
                    help="first scenario seed for planners (default 5000; 7000 for real-GIS worlds)")
@@ -233,6 +289,8 @@ def main() -> int:
                         "PyTorch builds. Integer columns, booleans and text always have to match exactly.")
     p.add_argument("--rerun-csv", type=Path, default=None,
                    help="compare an existing re-run CSV instead of running episodes again")
+    p.add_argument("--env", choices=("legacy", "refactored"), default="legacy",
+                   help="environment the episodes run in: the notebook classes or ruscuav_benchmark.env")
     args = p.parse_args()
 
     archive, work = args.archive.resolve(), args.work.resolve()
@@ -245,6 +303,9 @@ def main() -> int:
             archived = read_csv(archive / PLANNER_ARCHIVE.format(name=args.method))
         elif args.method in REAL_PLANNERS:
             archived = read_csv(archive / REAL_PLANNERS[args.method][1])
+        elif args.method.startswith("REWARD_FACTOR:"):
+            _, variant, seed = args.method.split(":", 2)
+            archived = read_csv(reward_factor_paths(archive, variant, int(seed))[1])
         else:
             _, method, seed = args.method.split(":", 2)
             run = "single_checkpoint" if seed == "single" else f"trainseed_{int(seed)}"
@@ -258,6 +319,8 @@ def main() -> int:
                 p.error(f"--real-world expects vienna=PATH or warsaw=PATH, got {item!r}")
             extra[path] = REAL_WORLD_DRIVE_NAMES[city]
         ns = load_legacy_namespace(archive, work, extra_inputs=extra)
+        if args.env == "refactored":
+            use_refactored_env(ns)
         world = ns.UrbanWorldLayers.load_npz(ns.CANONICAL_WORLD_PATH)
         if args.method in PLANNERS:
             seed0 = 5000 if args.seed0 is None else args.seed0
@@ -269,12 +332,19 @@ def main() -> int:
             _, method, seed = args.method.split(":", 2)
             run = "single_checkpoint" if seed == "single" else f"trainseed_{int(seed)}"
             archived, rerun, info = run_ppo(ns, world, method, run, args.episodes, archive, work)
+        elif args.method.startswith("REWARD_FACTOR:"):
+            _, variant, seed = args.method.split(":", 2)
+            if variant not in ("risk_only", "green_only"):
+                p.error(f"REWARD_FACTOR variant must be risk_only or green_only, got {variant!r}")
+            archived, rerun, info = run_reward_factor(ns, world, variant, int(seed), args.episodes, archive, work)
         else:
             p.error(f"Unknown method {args.method!r}")
 
-    report = {"method": args.method, "episodes": int(len(rerun)), "atol": args.atol, "rtol": args.rtol, **info,
-              **compare_episodes(archived, rerun, args.atol, args.rtol), "elapsed_s": round(time.time() - t0, 1)}
-    report_path = work / f"parity_{args.method.replace(':', '_').replace('+', 'p')}.json"
+    env = None if args.rerun_csv is not None else args.env
+    report = {"method": args.method, "env": env, "episodes": int(len(rerun)), "atol": args.atol,
+              "rtol": args.rtol, **info, **compare_episodes(archived, rerun, args.atol, args.rtol),
+              "elapsed_s": round(time.time() - t0, 1)}
+    report_path = work / f"parity_{args.method.replace(':', '_').replace('+', 'p')}_{env or 'rerun_csv'}.json"
     report_path.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
 
     ok = not report["mismatches"]

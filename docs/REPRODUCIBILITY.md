@@ -90,10 +90,86 @@ pinning (cumulative risk 42.497 and cargo health 0.95937 in both). The episode i
 numerically chaotic there: scaling the policy output by 1 + N(0, 1e-4) noise
 reproduces the archived outcome in 6 of 6 runs, and 1e-3 noise gives success,
 stuck and shield-stuck outcomes. The difference therefore comes from float-level
-sensitivity, not from the restored configuration.
+sensitivity, not from the restored configuration. These episodes are re-run with
+`--method REWARD_FACTOR:risk_only:1001` (or `green_only`, other training seeds).
 
 `tests/test_legacy_runtime.py` re-runs one archived episode when `RUSCUAV_ARCHIVE`
 points to the extracted archive.
+
+## The refactored environment
+
+`ruscuav_benchmark.env.RuscuavEnv` (docs/ENVIRONMENT.md) replaces the six notebook
+environment classes. It was compared with the notebook code in three ways, with the
+software versions above.
+
+**Step by step, every factory variant.** `scripts/migration/env_parity.py` builds
+each variant twice, with the notebook factory and with
+`ruscuav_benchmark.env.legacy_factories`. It resets both with the same seed and
+applies the same actions. After every step it compares the observation, reward,
+termination flags, the whole `info` dict and the state, bit for bit.
+
+The variants cover every stage, mode, method preset, safety-stack ablation, shield
+diagnostic, risk profile, dynamic and real-world configuration: 39 in all. Each
+was flown on missions 5003 and 5011 with a target-seeking and a random policy, two
+episodes per run. The second episode starts with an unseeded reset, as in
+training. That gives 164 runs and 38,482 steps, with no difference. Of the
+episodes, 153 ended in success, 3 in shield-stuck, 12 in stage C stops (sensitive
+zone, building collision), and the rest at the 150-step cap.
+
+```bash
+python scripts/migration/env_parity.py --archive /path/to/RUSCUAV-v2.0.0 --variants all \
+    --seeds 5003 5011 --max-steps 150
+```
+
+**Rarely reached paths.** `scripts/migration/env_parity_paths.py` drives both
+environments, in lockstep, into the paths those flights rarely reach. Where a
+default limit would take too long, it shortens the limit identically in both
+environments. The paths are:
+
+- stuck after 300 steps of hovering (stages B and C);
+- near-success, holding 38 m short of the target (421 and 458 steps);
+- timeout, cargo failure, terrain collision, and shield-stuck (3 runs);
+- the stage C stops: road and sidewalk budgets, the sensitive zone (2 runs) and
+  building collisions (2 runs);
+- a flight to the workspace boundary;
+- 40 unseeded resets, including reset retries;
+- 10 unseeded episodes with the dynamic observation;
+- the altitude reference without the building and canopy raise.
+
+It also compares the following function by function on 1,200 random states near
+buildings, canopy and sensitive zones: both shields, the clearance proxy and its
+gradient, the altitude reference, the endpoint check, the semantic observation, the
+LiDAR and the ground lookup. On these states the action shield kept 736 commands,
+replaced 44 and stopped 420. There was no difference anywhere.
+
+```bash
+python scripts/migration/env_parity_paths.py --archive /path/to/RUSCUAV-v2.0.0
+```
+
+**Archived episodes in the new environment.** With `--env refactored`,
+`scripts/legacy_parity.py` runs the archived evaluation code on `RuscuavEnv`. It
+re-ran the planner and PPO episodes checked at the top of this section:
+
+- STATIC, LOCAL and FULL receding-horizon A* (5 episodes each, seeds 5000–5004):
+  identical to the archive, bit for bit, as in the notebook environment.
+- The four PPO checkpoints (16 episodes) and the RISK-RL and GREEN-RL
+  reward-factor episodes (12): identical, bit for bit, to the re-runs in the
+  notebook environment. They therefore match the archive exactly as described
+  above: within the PyTorch float32 tolerance, apart from the one pinned episode.
+
+```bash
+python scripts/legacy_parity.py --archive /path/to/RUSCUAV-v2.0.0 --work runs/parity \
+    --method FULL_RH_Astar --episodes 5 --env refactored
+python scripts/legacy_parity.py --archive /path/to/RUSCUAV-v2.0.0 --work runs/parity \
+    --method REWARD_FACTOR:risk_only:3001 --episodes 3 --env refactored
+```
+
+`tests/test_env.py` replays five trajectories recorded from the notebook
+environment (`scripts/migration/make_env_golden.py`), so it needs no archive. The
+trajectories are a success, a stage C sidewalk-budget stop, a stuck termination
+after four reset attempts, and the semantic and dynamic observations. With
+`RUSCUAV_EXACT_GOLDEN=1` the test requires identical bits; this holds on the
+reference platform.
 
 The canonical-world missions (seeds 5000–5199), which the archived runs sampled
 inside `env.reset(seed)`, are recorded in

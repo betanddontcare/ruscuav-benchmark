@@ -17,6 +17,21 @@
   `scenarios/canonical/AOI_SYNTH_000_seed5000_n200.csv`.
 - The quickstart example runs from a repository checkout.
 - One package version, read from `ruscuav_benchmark.__version__`.
+- New Gymnasium environment `ruscuav_benchmark.env.RuscuavEnv` (extra `env`), one
+  configurable class in place of the six notebook environment classes: method
+  presets of the paper (GEO-RL … DYN-OBS-RL), stages A/B/C, the primary and secondary
+  regimes, and separate modules for dynamics, shields, cargo, LiDAR, reward,
+  observations, missions and dynamic risk. It reproduces the notebook environments
+  step for step (docs/ENVIRONMENT.md). `ruscuav_benchmark.env.legacy_factories`
+  provides the notebook factory names on top of it.
+- The legacy runtime also restores the notebook's reward-factor variants
+  (`risk_only`, `green_only`) and shield-diagnostic variants of `M8_VARIANTS`,
+  which the definitions-only extraction had dropped; the RISK-RL and GREEN-RL
+  environments can be created again.
+- `scripts/legacy_parity.py --env refactored` re-runs archived episodes in the new
+  environment, and `--method REWARD_FACTOR:…` the archived reward-factor
+  evaluations; `scripts/migration/env_parity.py` and `env_parity_paths.py` compare
+  the two environments step by step (docs/REPRODUCIBILITY.md).
 
 ## 2.0.0 — 2026-07-24
 

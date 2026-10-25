@@ -20,6 +20,15 @@ dependencies = [
   "pyyaml>=6.0"
 ]
 
+[project.optional-dependencies]
+# The Gymnasium environment ruscuav_benchmark.env. NumPy 2 type promotion (NEP 50)
+# is what the archived results were computed with.
+env = [
+  "numpy>=2.0",
+  "gymnasium>=0.29",
+  "scipy>=1.10"
+]
+
 [project.urls]
 Homepage = "https://zenodo.org/"
 
