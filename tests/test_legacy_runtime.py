@@ -48,6 +48,17 @@ def test_virtual_drive_copies_inputs(tmp_path):
     assert all((drive / d).read_bytes() == b"original" for d in runtime.ARCHIVE_TO_DRIVE.values())
 
 
+def test_virtual_drive_takes_extra_inputs(tmp_path):
+    archive = tmp_path / "archive"
+    for rel in runtime.ARCHIVE_TO_DRIVE:
+        (archive / rel).parent.mkdir(parents=True, exist_ok=True)
+        (archive / rel).write_bytes(b"original")
+    extra = tmp_path / "vienna.npz"
+    extra.write_bytes(b"real world")
+    drive = runtime.prepare_virtual_drive(archive, tmp_path / "drive", {extra: "worlds/vienna_x_urban_world_layers.npz"})
+    assert (drive / "worlds/vienna_x_urban_world_layers.npz").read_bytes() == b"real world"
+
+
 def test_state_patches_keep_line_numbers():
     source = runtime.DEFINITIONS_PATH.read_text(encoding="utf-8")
     patched = runtime.apply_notebook_state_patches(source)

@@ -41,6 +41,26 @@ PLANNERS = {
     "FULL_RH_Astar": ("evaluate_m10_receding_planner_drive", "REPORTED_M10_FULL_CONFIG", "M10RecedingHorizonPlannerConfig"),
 }
 PLANNER_ARCHIVE = "experiments/paperA_primary_no_terminal_static_planners/eval/primary_no_terminal_{name}_n200_seed5000/primary_no_terminal_{name}_n200_seed5000_episodes.csv"
+
+#: Real-GIS full-map receding A* runs (planner altitude 30 m, seeds from 7000). The
+#: processed worlds are not in the archive; pass them with --real-world.
+REAL_PLANNERS = {
+    "VIENNA_FULL_RH_Astar": (
+        "vienna",
+        "experiments/paperA_primary_no_terminal_vienna/eval/primary_no_terminal_Vienna_FULL_RH_Astar/"
+        "primary_no_terminal_Vienna_FULL_RH_Astar_episodes.csv",
+    ),
+    "WARSAW_FULL_RH_Astar": (
+        "warsaw",
+        "experiments/paperA_primary_no_terminal_warsaw_scenario_aligned/eval/"
+        "primary_no_terminal_Warsaw_FULL_RH_Astar_seed7000/primary_no_terminal_Warsaw_FULL_RH_Astar_seed7000_episodes.csv",
+    ),
+}
+#: File names the notebook used for the processed real-GIS worlds on Drive.
+REAL_WORLD_DRIVE_NAMES = {
+    "vienna": "worlds/vienna_prater_leopoldstadt_osm_1km_v1_urban_world_layers.npz",
+    "warsaw": "worlds/warsaw_centrum_osm_1km_v1_urban_world_layers.npz",
+}
 PPO_ARCHIVE = "experiments/paperA_submission_repair_v1/primary_no_terminal/static/{method}/{run}"
 
 #: Not compared: wall-clock measurements differ between machines, and "episode" is a
@@ -156,6 +176,22 @@ def run_planner(ns, world, name: str, n: int, seed0: int, archive: Path) -> tupl
     return archived, rerun, {"rerun_csv": str(csv_path), "config": getattr(ns, cfg_name)}
 
 
+def run_real_planner(ns, name: str, n: int, seed0: int, archive: Path) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+    city, archived_csv = REAL_PLANNERS[name]
+    (vienna, vienna_src), (warsaw, warsaw_src) = ns.get_real_worlds()  # the archived run's code path
+    world, source = (vienna, vienna_src) if city == "vienna" else (warsaw, warsaw_src)
+    cfg = ns.M10RecedingHorizonPlannerConfig(**{**ns.REPORTED_M10_FULL_CONFIG, "planner_agl_m": 30.0})
+    dirs = ns.setup_ruscuav_drive_project(drive_root=str(ns.RUSCUAV_VIRTUAL_DRIVE), experiment_name="legacy_parity")
+    regime = ns.PRIMARY_NO_TERMINAL
+    rerun, _, csv_path, _ = ns.evaluate_m10_receding_planner_drive(
+        world=world, drive_dirs=dirs, cfg=cfg, risk_profile="balanced", n_episodes=n, seed0=seed0,
+        stage=regime.stage, mode=regime.mode, n_obstacles=0,
+        prefix=f"parity_{name}_n{n}_seed{seed0}_{int(time.time())}", save_paths=True,
+    )
+    archived = read_csv(archive / archived_csv)
+    return archived, rerun, {"rerun_csv": str(csv_path), "world_source": str(source), "world_aoi_id": world.aoi_id}
+
+
 def run_ppo(ns, world, method: str, run: str, n: int, archive: Path, work: Path) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     run_dir = archive / PPO_ARCHIVE.format(method=method, run=run)
     protocol = json.loads((run_dir / "protocol.json").read_text(encoding="utf-8"))
@@ -184,9 +220,13 @@ def main() -> int:
     p.add_argument("--archive", required=True, type=Path, help="Extracted RUSCUAV-v2.0.0 Zenodo archive")
     p.add_argument("--work", required=True, type=Path, help="Writable work directory")
     p.add_argument("--method", required=True,
-                   help="STATIC_Astar | LOCAL_RH_Astar | FULL_RH_Astar | PPO:<method>:<train seed or 'single'>")
+                   help="STATIC_Astar | LOCAL_RH_Astar | FULL_RH_Astar | VIENNA_FULL_RH_Astar | "
+                        "WARSAW_FULL_RH_Astar | PPO:<method>:<train seed or 'single'>")
     p.add_argument("--episodes", type=int, default=5)
-    p.add_argument("--seed0", type=int, default=5000, help="First scenario seed (planners)")
+    p.add_argument("--seed0", type=int, default=None,
+                   help="first scenario seed for planners (default 5000; 7000 for real-GIS worlds)")
+    p.add_argument("--real-world", action="append", default=[], metavar="CITY=NPZ",
+                   help="processed real-GIS world for VIENNA_/WARSAW_ methods, e.g. vienna=/data/vienna.npz")
     p.add_argument("--atol", type=float, default=1e-9, help="absolute tolerance for numeric values")
     p.add_argument("--rtol", type=float, default=1e-5,
                    help="relative tolerance for non-integer numbers; absorbs float32 differences between "
@@ -203,16 +243,28 @@ def main() -> int:
         rerun = read_csv(args.rerun_csv)
         if args.method in PLANNERS:
             archived = read_csv(archive / PLANNER_ARCHIVE.format(name=args.method))
+        elif args.method in REAL_PLANNERS:
+            archived = read_csv(archive / REAL_PLANNERS[args.method][1])
         else:
             _, method, seed = args.method.split(":", 2)
             run = "single_checkpoint" if seed == "single" else f"trainseed_{int(seed)}"
             archived = read_csv(archive / PPO_ARCHIVE.format(method=method, run=run) / "episodes.csv")
         info = {"rerun_csv": str(args.rerun_csv)}
     else:
-        ns = load_legacy_namespace(archive, work)
+        extra = {}
+        for item in args.real_world:
+            city, _, path = item.partition("=")
+            if city not in REAL_WORLD_DRIVE_NAMES or not path:
+                p.error(f"--real-world expects vienna=PATH or warsaw=PATH, got {item!r}")
+            extra[path] = REAL_WORLD_DRIVE_NAMES[city]
+        ns = load_legacy_namespace(archive, work, extra_inputs=extra)
         world = ns.UrbanWorldLayers.load_npz(ns.CANONICAL_WORLD_PATH)
         if args.method in PLANNERS:
-            archived, rerun, info = run_planner(ns, world, args.method, args.episodes, args.seed0, archive)
+            seed0 = 5000 if args.seed0 is None else args.seed0
+            archived, rerun, info = run_planner(ns, world, args.method, args.episodes, seed0, archive)
+        elif args.method in REAL_PLANNERS:
+            seed0 = 7000 if args.seed0 is None else args.seed0
+            archived, rerun, info = run_real_planner(ns, args.method, args.episodes, seed0, archive)
         elif args.method.startswith("PPO:"):
             _, method, seed = args.method.split(":", 2)
             run = "single_checkpoint" if seed == "single" else f"trainseed_{int(seed)}"

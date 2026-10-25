@@ -87,17 +87,26 @@ def apply_notebook_state_patches(source: str) -> str:
     return source
 
 
-def prepare_virtual_drive(archive_root: str | Path, drive_root: str | Path) -> Path:
-    """Create the Drive layout the notebook expected, with copies of the archived inputs."""
+def prepare_virtual_drive(
+    archive_root: str | Path,
+    drive_root: str | Path,
+    extra_inputs: Optional[Mapping[str | Path, str]] = None,
+) -> Path:
+    """Create the Drive layout the notebook expected, with copies of the archived inputs.
+
+    ``extra_inputs`` maps further local files to Drive-relative paths, e.g. processed
+    real-GIS worlds that the Zenodo archive does not distribute:
+    ``{"/data/vienna.npz": "worlds/vienna_prater_leopoldstadt_osm_1km_v1_urban_world_layers.npz"}``.
+    """
     archive_root = Path(archive_root).resolve()
     drive_root = Path(drive_root).resolve()
     drive_root.mkdir(parents=True, exist_ok=True)
-    for archive_rel, drive_rel in ARCHIVE_TO_DRIVE.items():
-        source = archive_root / archive_rel
+    inputs = [(archive_root / rel, drive_rel) for rel, drive_rel in ARCHIVE_TO_DRIVE.items()]
+    inputs += [(Path(src).resolve(), drive_rel) for src, drive_rel in (extra_inputs or {}).items()]
+    for source, drive_rel in inputs:
         if not source.exists():
             raise FileNotFoundError(
-                f"Archived input not found: {source}. Is {archive_root} an extracted "
-                "RUSCUAV v2.0.0 Zenodo archive?"
+                f"Input not found: {source}. Is {archive_root} an extracted RUSCUAV v2.0.0 Zenodo archive?"
             )
         target = drive_root / drive_rel
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -132,15 +141,17 @@ def load_legacy_namespace(
     include_repair_cells: bool = True,
     repair_cells_path: Optional[str | Path] = None,
     module_name: str = "ruscuav_legacy_notebook",
+    extra_inputs: Optional[Mapping[str | Path, str]] = None,
 ) -> types.ModuleType:
     """Execute the legacy notebook code in one namespace and return it as a module.
 
     ``work_dir`` receives the virtual drive (``work_dir/drive``) and Colab-local
     folders (``work_dir/colab_local``). Legacy functions are then called as
     attributes of the returned module, e.g. ``ns.evaluate_m9_static_planner_drive``.
+    ``extra_inputs`` is passed to :func:`prepare_virtual_drive`.
     """
     work_dir = Path(work_dir).resolve()
-    drive_root = prepare_virtual_drive(archive_root, work_dir / "drive")
+    drive_root = prepare_virtual_drive(archive_root, work_dir / "drive", extra_inputs)
     colab_local_root = work_dir / "colab_local"
     colab_local_root.mkdir(parents=True, exist_ok=True)
 
