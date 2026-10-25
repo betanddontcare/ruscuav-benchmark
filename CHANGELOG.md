@@ -9,7 +9,7 @@
   no longer execute code when loaded.
 - World NPZ schema `ruscuav-world/1.0` (docs/WORLD_NPZ_SCHEMA.md): `schema_version` and
   optional `meta_json` provenance; `ruscuav validate` checks files against it.
-- New `ruscuav` command (`validate`, `evaluate`); `ruscuav-evaluate` is unchanged.
+- New `ruscuav` command (`validate`, `evaluate`); `ruscuav-evaluate` is `ruscuav evaluate`.
 - The canonical world `AOI_FAKE_001` is renamed `AOI_SYNTH_000` and its CRS label
   corrected from `EPSG:2180` to `LOCAL_METRIC_SYNTHETIC`; the old ID still resolves.
   The four synthetic worlds are now part of the repository (layers unchanged).
@@ -43,6 +43,30 @@
 - `scripts/legacy_parity.py` gives real-GIS worlds to the notebook code under the
   footway-only names the archived runs used, needs only the world of the city being
   re-run, and records the world's checksums in its report.
+- New `ruscuav_benchmark.planners`: the four planners of the paper
+  (`STATIC_Astar`, `LOCAL_RH_Astar`, `FULL_RH_Astar`, `DYN_RH_Astar`), ported from the
+  notebook's M9, M10 and M11 code with one A* implementation and flown in
+  `ruscuav_benchmark.env`. `evaluate_planner` writes per-episode CSVs with the columns
+  of the archived planner rollouts, and summaries (docs/PLANNERS.md). They reproduce
+  the notebook planners step for step and all 200 episodes of each archived
+  primary planner evaluation, Vienna included (docs/REPRODUCIBILITY.md).
+- `ruscuav evaluate` (and `ruscuav-evaluate`, `scripts/run_static_astar_eval.py`)
+  flies these planners: `--planner`, missions from `--scenarios` or from seeds,
+  `--regime`, `--set FIELD=VALUE`, `--prefix`; it needs the `env` extra. Removed:
+  the simplified static planner of v2.0.0 (`RiskCostAStarPlanner`,
+  `RiskAStarConfig`, `run_static_astar_evaluation`: 10 m grid, λ = 0.05, metrics
+  along the unflown path), which did not reproduce the paper, and the options
+  `--plan-res-m`, `--agl-m`, `--risk-lambda` and `--max-episodes`. The quickstart
+  flies `STATIC_Astar` on recorded canonical missions.
+- `RuscuavEnv.reset(options={"start": ..., "target": ...})` flies a given mission;
+  `ruscuav_benchmark.scenarios` reads missions from scenario CSVs (`read_scenarios`
+  moved there and is still importable from `ruscuav_benchmark.evaluate`).
+- The JSON of the canonical-world missions also records the world file, its layers
+  checksum and the cross-check in `ruscuav_benchmark.env` (the CSV is unchanged).
+- `scripts/legacy_parity.py` re-runs the archived dynamic planner evaluation
+  (`DYN_RH_Astar`) and, with `--planners package`, flies the package planners;
+  `scripts/migration/planner_parity.py` compares notebook and package planners step
+  by step, and `make_planner_golden.py` records the test episodes.
 
 ## 2.0.0 — 2026-07-24
 

@@ -56,7 +56,7 @@ them, column by column, with the archived per-episode CSVs:
 ```bash
 pip install -r requirements-reproducibility.txt
 python scripts/legacy_parity.py --archive /path/to/RUSCUAV-v2.0.0 --work runs/parity \
-    --method STATIC_Astar --episodes 5      # also LOCAL_RH_Astar, FULL_RH_Astar
+    --method STATIC_Astar --episodes 5      # also LOCAL_RH_Astar, FULL_RH_Astar, DYN_RH_Astar
 python scripts/legacy_parity.py --archive /path/to/RUSCUAV-v2.0.0 --work runs/parity \
     --method PPO:RISK+GREEN-RL:4001 --episodes 5
 ```
@@ -70,6 +70,7 @@ the archived checkpoints):
 | STATIC_Astar | 13 (5000–5004, 5100–5107) | Identical: the re-run CSV rows match the archived rows character for character, apart from the episode counter and planning wall-clock times. |
 | LOCAL_RH_Astar | 11 (5000–5004, 5194–5199) | Identical, as above. |
 | FULL_RH_Astar | 10 (5000–5004, 5195–5199) | Identical, as above. |
+| DYN_RH_Astar (primary dynamic evaluation, with its post-hoc step) | 5 (5000–5004) | 4 rows identical, as above; in seed 5001 the cumulative risk differs by 7e-15 and other risk values by up to 1e-15. |
 | PPO RISK+GREEN-RL (train seed 4001), GEO-RL (1001), OBS-RL (2001), RISK+OBS-RL (single checkpoint) | 5, 5, 3, 3 (from 5000) | Termination, success, acceptability, step counts and exposure times identical; cumulative risk equal to within 4e-15; positions within 0.2 mm; total reward within 0.003. |
 | VIENNA_FULL_RH_Astar, footway-only world (see "Real-GIS worlds") | 20 (7000–7019) | 19 rows identical, as above; in seed 7004 the cumulative risk differs by 1.4e-14 and the mean risk by 4e-16. |
 
@@ -177,6 +178,84 @@ inside `env.reset(seed)`, are recorded in
 `scenarios/canonical/AOI_SYNTH_000_seed5000_n200.csv` by
 `scripts/materialize_legacy_scenarios.py`.
 
+## The planners
+
+`ruscuav_benchmark.planners` (docs/PLANNERS.md) replaces the notebook's M9, M10 and
+M11 planners. It was compared with the notebook code in three ways, with the
+software versions above.
+
+**Step by step.** `scripts/migration/planner_parity.py` flies every case twice on
+the same mission: with the notebook's rollout function in the notebook
+environment, and with the package rollout in `ruscuav_benchmark.env`. Both record
+every plan (start, path, cost, expanded cells and outcome), every action and every
+position. These, the reset info and the episode row are compared bit for bit; only
+the planning wall-clock times are not. The cases are:
+
+- the four planners of the paper on missions 5000, 5003 and 5011 in the primary
+  regime, and `FULL_RH_Astar` and `DYN_RH_Astar` on missions 5003 and 5011 in the
+  secondary regime: 16 episodes, all flown to the target;
+- 18 configuration variants on mission 5003, flown for 60 steps (30 when
+  replanning at every step): Dijkstra's search, the `zero` and `blurred` priors,
+  sensed blockers, replanning at every step, a 30 m sensing radius, a slower
+  controller, planning altitudes of 25 m (no path) and 90 m, no building and canopy
+  blocking, risk weights of 0 and 3, grids of 3 and 10 m, and the dynamic planner
+  with the `mean` prior and with other replanning and sensing settings;
+- planning failures: the static, local and dynamic planners in a planner world in
+  which the goal is buried in a building block or walled in (6 runs).
+
+It also compares, function by function, the planning grids of 8 configurations
+with 10 random plans on each, the beliefs of the four priors, with known and with
+sensed blockers, after each of six sensing steps, each followed by a plan, and the
+dynamic beliefs of both dynamic priors in two episodes at five steps. The 40
+episodes (2,883 steps, 552 plans) and the 20 function checks were identical.
+
+```bash
+python scripts/migration/planner_parity.py --archive /path/to/RUSCUAV-v2.0.0
+```
+
+**The archived evaluations.** With `--planners package`, `scripts/legacy_parity.py`
+flies the package planners in `ruscuav_benchmark.env` and compares their rows with
+the archived per-episode CSVs, as above. All 200 episodes of each primary planner
+evaluation were re-run:
+
+| Planner | Episodes (seeds) | Success / acceptable | Rows identical | Other rows: risk values differ by up to |
+|---|---|---|---|---|
+| STATIC_Astar | 200 (5000–5199) | 92.5 % / 91.5 % | 189 | 7e-15 (11 rows) |
+| LOCAL_RH_Astar | 200 (5000–5199) | 98.5 % / 95.0 % | 189 | 7e-15 (11 rows) |
+| FULL_RH_Astar | 200 (5000–5199) | 98.5 % / 97.0 % | 183 | 7e-15 (17 rows) |
+| DYN_RH_Astar | 200 (5000–5199) | 99.5 % / 52.0 % | 164 | 1.4e-14 (36 rows) |
+| VIENNA_FULL_RH_Astar (`FULL_RH_Astar` at 30 m, see "Real-GIS worlds") | 200 (7000–7199) | 97.5 % / 65.0 % | 174 | 2.8e-14 (26 rows) |
+
+The success and acceptability rates are those of the archived runs. In the other
+rows only the mean, maximum and cumulative risk (and, for the dynamic planner, the
+dynamic risk and the risk rates derived post hoc) differ, in the last bits; steps,
+terminations, final distances, exposure times and cargo health are identical. The
+notebook code gives the same values as the package on this machine (checked for
+STATIC_Astar 5008, FULL_RH_Astar 5106, DYN_RH_Astar 5001 and Vienna 7004), so
+the differences come from the floating-point arithmetic of the machine that
+produced the archive, not from the port. The 200 episodes of one planner take
+70–90 minutes on one core.
+
+For the dynamic planner, `legacy_parity.py` applies the archived evaluation's
+post-hoc step with the notebook's functions (docs/PLANNERS.md). From the archived
+episode rows, `summarize_planner_rows` gives the values of the archived summaries
+exactly: every statistic of the static and receding planners' summaries, and the
+14 it computes of the dynamic planner's summary (which adds conditional
+statistics of the post-hoc step). `tests/test_planner_outputs.py` checks this when
+`RUSCUAV_ARCHIVE` points to the archive.
+
+```bash
+python scripts/legacy_parity.py --archive /path/to/RUSCUAV-v2.0.0 --work runs/parity \
+    --method DYN_RH_Astar --episodes 200 --planners package
+```
+
+`tests/test_planner_episodes.py` replays ten episodes recorded from the notebook
+planners (`scripts/migration/make_planner_golden.py`), so it needs no archive: the
+first 30 steps of each planner, and of the dynamic planner also in stage C, a
+static flight to the target, and planning failures at the start and in mid-flight.
+It compares the rows, the plans and the reset info; with `RUSCUAV_EXACT_GOLDEN=1`
+bit for bit.
+
 ## Real-GIS worlds (Vienna, Warsaw)
 
 The processed Vienna and Warsaw worlds are derived from OpenStreetMap data and are
@@ -198,7 +277,14 @@ python scripts/legacy_parity.py --archive /path/to/RUSCUAV-v2.0.0 --work runs/pa
 runs (file SHA-256 `d63f0622…`, layers checksum `fa99c571…`). It reproduces the 20
 archived primary planner episodes VIENNA_FULL_RH_Astar 7000–7019 (table above). In
 `RuscuavEnv` (`--env refactored`), episodes 7000–7004 give, character for
-character, the rows of the notebook environment.
+character, the rows of the notebook environment. The package planner reproduces
+all 200 episodes, 7000–7199 ("The planners"):
+
+```bash
+python scripts/legacy_parity.py --archive /path/to/RUSCUAV-v2.0.0 --work runs/parity \
+    --method VIENNA_FULL_RH_Astar --episodes 200 --planners package \
+    --real-world vienna=/path/to/vienna_prater_leopoldstadt_osm_1km_v1_footway_only_urban_world_layers.npz
+```
 
 This copy is a later build of the world than the one in the v1 release. The file
 of the same name in the archive's v1 asset index (built 2 July 2026) has other

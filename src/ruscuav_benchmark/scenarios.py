@@ -2,12 +2,50 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
-from typing import Dict, Iterable, List
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 
 from .risk import UrbanRiskModel
-from .world import UrbanWorldLayers
+from .world import UrbanWorldLayers, canonical_aoi_id
+
+
+def read_scenarios(path: str | Path, world_id: str | None = None) -> List[dict]:
+    """Read a scenario CSV, optionally keeping only the rows of one world (legacy world
+    IDs match too). A file without a ``world_id`` column is taken to be of that world."""
+    with Path(path).open("r", newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+        has_world_column = "world_id" in (reader.fieldnames or [])
+    if world_id is not None and has_world_column:
+        wanted = canonical_aoi_id(world_id)
+        rows = [r for r in rows if canonical_aoi_id(r.get("world_id", "")) == wanted]
+    return rows
+
+
+def mission_from_row(row: Dict[str, Any]) -> Dict[str, List[float]]:
+    """Reset options ``{"start": [...], "target": [...]}`` of a scenario row.
+
+    The row needs ``start_x``, ``start_y``, ``target_x`` and ``target_y``; ``start_z`` and
+    ``target_z`` are used when present and not empty (absolute altitudes in metres).
+    """
+    def point(prefix: str) -> List[float]:
+        try:
+            xyz = [float(row[f"{prefix}_x"]), float(row[f"{prefix}_y"])]
+        except KeyError as exc:
+            raise ValueError(f"scenario row has no {exc.args[0]!r} column") from exc
+        z = row.get(f"{prefix}_z")
+        if z not in (None, ""):
+            xyz.append(float(z))
+        return xyz
+
+    return {"start": point("start"), "target": point("target")}
+
+
+def scenario_seed(row: Dict[str, Any]) -> Optional[int]:
+    """Episode seed of a scenario row (None if the row has none)."""
+    value = row.get("seed")
+    return None if value in (None, "") else int(value)
 
 
 def sample_static_scenarios(

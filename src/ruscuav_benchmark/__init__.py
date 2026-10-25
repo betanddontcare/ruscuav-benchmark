@@ -14,7 +14,15 @@ from .world import (
 )
 from .risk import UrbanRiskModel, UrbanRiskProfile, RISK_PROFILES
 from .metrics import ExposureBudgets, evaluate_path, summarize_episode_records
-from .planners import RiskAStarConfig, RiskCostAStarPlanner
+from .planners import (
+    PLANNER_PRESETS,
+    DynamicRecedingPlanner,
+    PlannerConfig,
+    RecedingHorizonPlanner,
+    RecedingPlannerConfig,
+    StaticPlanner,
+    evaluate_planner,
+)
 
 #: Single source of the package version (pyproject.toml reads it from here).
 __version__ = "2.1.0.dev0"
@@ -32,6 +40,11 @@ __all__ = [
     "ExposureBudgets",
     "evaluate_path",
     "summarize_episode_records",
-    "RiskAStarConfig",
-    "RiskCostAStarPlanner",
+    "PLANNER_PRESETS",
+    "PlannerConfig",
+    "RecedingPlannerConfig",
+    "StaticPlanner",
+    "RecedingHorizonPlanner",
+    "DynamicRecedingPlanner",
+    "evaluate_planner",
 ]

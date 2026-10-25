@@ -50,8 +50,9 @@ configuration with `make_config` and creates the environment. Any field of
 | `DYN-RISK-RL` | geometry | risk + green | reported field |
 | `DYN-OBS-RL` | dynamic (86) | risk + green | reported field |
 
-The planners of the paper ran in the `RISK+OBS-RL` environment (they ignore the
-observation). `STATIC-RL-DYN` evaluates a static policy in the `DYN-RISK-RL` environment.
+The static and receding planners of the paper ran in the `RISK+OBS-RL`
+environment, the dynamic planner in `DYN-RISK-RL` (they ignore the observation;
+docs/PLANNERS.md). `STATIC-RL-DYN` evaluates a static policy in the `DYN-RISK-RL` environment.
 
 **Regimes, stages and modes:**
 
@@ -191,7 +192,17 @@ or with risk above 1), it reseeds with `s + 9973·k` for attempt k, up to 300
 attempts. `reset()` without a seed continues the generator, as training does. The
 dynamic field of an episode is seeded with `s`, or drawn from the generator. The
 missions of seeds 5000–5199 on the canonical world are listed in
-`scenarios/canonical/AOI_SYNTH_000_seed5000_n200.csv`.
+`scenarios/canonical/AOI_SYNTH_000_seed5000_n200.csv`, those of the Vienna
+evaluations in `scenarios/real_gis/`.
+
+`reset(seed=s, options={"start": (x, y[, z]), "target": (x, y[, z])})` flies a
+given mission instead, for example a row of a scenario file
+(`ruscuav_benchmark.scenarios.mission_from_row`). Coordinates are in metres; a
+missing z is the cruise altitude, 30 m above the ground. The mission is still
+drawn first, so the random state, and the dynamic field, are those of `s`: a given
+mission equal to the drawn one reproduces the plain reset exactly. Given endpoints
+are not rejected when unsafe; `info` reports their safety and
+`info["mission_source"]` is `"options"`.
 
 ## Relation to the v2.0.0 notebook environments
 

@@ -21,6 +21,12 @@ environment (ruscuav_benchmark.env) instead of the notebook classes: the
 notebook's environment factories are replaced by those of
 ruscuav_benchmark.env.legacy_factories before the episodes run.
 
+With ``--planners package`` the planner methods fly the planners of
+ruscuav_benchmark.planners in ruscuav_benchmark.env instead of the notebook's planner
+code. The dynamic planner's rows then get the post-hoc columns of the archived
+evaluation (derived metrics, mission acceptability recomputed) from the notebook's
+own functions.
+
 Requires the reproducibility dependencies (requirements-reproducibility.txt).
 Exit code 0 means every compared value matched within the tolerance.
 """
@@ -35,6 +41,7 @@ import sys
 import time
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -48,8 +55,17 @@ PLANNERS = {
     "STATIC_Astar": ("evaluate_m9_static_planner_drive", "REPORTED_M9_CONFIG", "M9PlannerConfig"),
     "LOCAL_RH_Astar": ("evaluate_m10_receding_planner_drive", "REPORTED_M10_LOCAL_CONFIG", "M10RecedingHorizonPlannerConfig"),
     "FULL_RH_Astar": ("evaluate_m10_receding_planner_drive", "REPORTED_M10_FULL_CONFIG", "M10RecedingHorizonPlannerConfig"),
+    "DYN_RH_Astar": ("evaluate_dynamic_planner_mode", "REPORTED_M11_PLANNER_CONFIG", "M10RecedingHorizonPlannerConfig"),
 }
 PLANNER_ARCHIVE = "experiments/paperA_primary_no_terminal_static_planners/eval/primary_no_terminal_{name}_n200_seed5000/primary_no_terminal_{name}_n200_seed5000_episodes.csv"
+DYNAMIC_PLANNER_ARCHIVE = (
+    "experiments/paperA_primary_no_terminal_dynamic/eval/primary_no_terminal_dynamic_receding_Astar/"
+    "primary_no_terminal_dynamic_receding_Astar_episodes.csv"
+)
+
+
+def planner_archive(name: str) -> str:
+    return DYNAMIC_PLANNER_ARCHIVE if name == "DYN_RH_Astar" else PLANNER_ARCHIVE.format(name=name)
 
 #: Real-GIS full-map receding A* runs (planner altitude 30 m, seeds from 7000). The
 #: processed worlds are not in the archive; pass them with --real-world.
@@ -200,19 +216,55 @@ def run_planner(ns, world, name: str, n: int, seed0: int, archive: Path) -> tupl
     cfg = getattr(ns, cfg_cls)(**getattr(ns, cfg_name))
     dirs = ns.setup_ruscuav_drive_project(drive_root=str(ns.RUSCUAV_VIRTUAL_DRIVE), experiment_name="legacy_parity")
     regime = ns.PRIMARY_NO_TERMINAL
-    kwargs = dict(
-        world=world, drive_dirs=dirs, risk_profile="balanced", n_episodes=n, seed0=seed0,
-        stage=regime.stage, mode=regime.mode, n_obstacles=0,
-        prefix=f"parity_{name}_n{n}_seed{seed0}_{int(time.time())}", save_paths=True,
-    )
-    kwargs["planner_config" if evaluator.startswith("evaluate_m9") else "cfg"] = cfg
-    rerun, _, csv_path, _ = getattr(ns, evaluator)(**kwargs)
-    archived = read_csv(archive / PLANNER_ARCHIVE.format(name=name))
+    prefix = f"parity_{name}_n{n}_seed{seed0}_{int(time.time())}"
+    if name == "DYN_RH_Astar":
+        _, _, csv_path, _ = ns.evaluate_dynamic_planner_mode(
+            world=world, drive_dirs=dirs, cfg=cfg, dynamic_config=ns.reported_dynamic_config(), regime=regime,
+            n_episodes=n, seed0=seed0, prefix=prefix, dynamic_prior_mode="zero", save_paths=True,
+        )
+        rerun = read_csv(csv_path)
+    else:
+        kwargs = dict(
+            world=world, drive_dirs=dirs, risk_profile="balanced", n_episodes=n, seed0=seed0,
+            stage=regime.stage, mode=regime.mode, n_obstacles=0, prefix=prefix, save_paths=True,
+        )
+        kwargs["planner_config" if evaluator.startswith("evaluate_m9") else "cfg"] = cfg
+        rerun, _, csv_path, _ = getattr(ns, evaluator)(**kwargs)
+    archived = read_csv(archive / planner_archive(name))
     return archived, rerun, {"rerun_csv": str(csv_path), "config": getattr(ns, cfg_name)}
 
 
-def run_real_planner(ns, name: str, n: int, seed0: int, archive: Path,
-                     given_cities: set) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+def run_package_planner(ns, world_path, name: str, n: int, seed0: int, work: Path,
+                        **config_changes) -> tuple[pd.DataFrame, dict]:
+    """Episodes of ruscuav_benchmark.planners in ruscuav_benchmark.env, in the archived
+    evaluation's format."""
+    from ruscuav_benchmark.planners import evaluate_planner
+
+    world = UrbanWorldLayers.load_npz(world_path)
+    out_dir = work / "package_planners" / f"{name}_n{n}_seed{seed0}_{int(time.time())}"
+    result = evaluate_planner(world, name, seeds=range(seed0, seed0 + n), output_dir=out_dir, save_paths=True,
+                              **config_changes)
+    csv_path = result.csv_path
+    if name == "DYN_RH_Astar":
+        # The archived primary dynamic evaluation (evaluate_dynamic_planner_mode) adds the
+        # regime and the flown path length, then the post-hoc columns.
+        rows = []
+        for index, row in enumerate(result.rows):
+            row = dict(row)
+            row["evaluation_regime"] = ns.PRIMARY_NO_TERMINAL.name
+            path = result.paths[index]
+            row["path_length_xy"] = float(np.linalg.norm(np.diff(path[:, :2], axis=0), axis=1).sum())
+            rows.append(row)
+        df = ns.add_derived_metrics(pd.DataFrame(rows).sort_values("episode"))
+        df["mission_acceptable"] = ns.recompute_dynamic_acceptability(df)
+        csv_path = out_dir / f"{name}_posthoc_episodes.csv"
+        df.to_csv(csv_path, index=False)
+    return read_csv(csv_path), {"rerun_csv": str(csv_path), "planner": result.planner.to_dict(),
+                                "world_layers_sha256": world.layers_sha256()}
+
+
+def run_real_planner(ns, name: str, n: int, seed0: int, archive: Path, given_cities: set,
+                     package_work: Path | None = None) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     city, archived_csv = REAL_PLANNERS[name]
     # get_real_worlds() loads both cities; a city without --real-world gets a placeholder,
     # so that a Vienna run needs no Warsaw world and vice versa.
@@ -221,6 +273,11 @@ def run_real_planner(ns, name: str, n: int, seed0: int, archive: Path,
             setattr(ns, global_name, None)
     (vienna, vienna_src), (warsaw, warsaw_src) = ns.get_real_worlds()  # the archived run's code path
     world, source = (vienna, vienna_src) if city == "vienna" else (warsaw, warsaw_src)
+    archived = read_csv(archive / archived_csv)
+    if package_work is not None:
+        rerun, info = run_package_planner(ns, source, "FULL_RH_Astar", n, seed0, package_work, planner_agl_m=30.0)
+        info.update({"world_source": str(source), "world_sha256": sha256_file(Path(str(source)))})
+        return archived, rerun, info
     cfg = ns.M10RecedingHorizonPlannerConfig(**{**ns.REPORTED_M10_FULL_CONFIG, "planner_agl_m": 30.0})
     dirs = ns.setup_ruscuav_drive_project(drive_root=str(ns.RUSCUAV_VIRTUAL_DRIVE), experiment_name="legacy_parity")
     regime = ns.PRIMARY_NO_TERMINAL
@@ -229,7 +286,6 @@ def run_real_planner(ns, name: str, n: int, seed0: int, archive: Path,
         stage=regime.stage, mode=regime.mode, n_obstacles=0,
         prefix=f"parity_{name}_n{n}_seed{seed0}_{int(time.time())}", save_paths=True,
     )
-    archived = read_csv(archive / archived_csv)
     info = {"rerun_csv": str(csv_path), "world_source": str(source), "world_aoi_id": world.aoi_id}
     if Path(str(source)).is_file():
         info["world_sha256"] = sha256_file(Path(str(source)))
@@ -292,7 +348,7 @@ def main() -> int:
     p.add_argument("--archive", required=True, type=Path, help="Extracted RUSCUAV-v2.0.0 Zenodo archive")
     p.add_argument("--work", required=True, type=Path, help="Writable work directory")
     p.add_argument("--method", required=True,
-                   help="STATIC_Astar | LOCAL_RH_Astar | FULL_RH_Astar | VIENNA_FULL_RH_Astar | "
+                   help="STATIC_Astar | LOCAL_RH_Astar | FULL_RH_Astar | DYN_RH_Astar | VIENNA_FULL_RH_Astar | "
                         "WARSAW_FULL_RH_Astar | PPO:<method>:<train seed or 'single'> | "
                         "REWARD_FACTOR:<risk_only|green_only>:<train seed>")
     p.add_argument("--episodes", type=int, default=5)
@@ -309,6 +365,9 @@ def main() -> int:
                    help="compare an existing re-run CSV instead of running episodes again")
     p.add_argument("--env", choices=("legacy", "refactored"), default="legacy",
                    help="environment the episodes run in: the notebook classes or ruscuav_benchmark.env")
+    p.add_argument("--planners", choices=("notebook", "package"), default="notebook",
+                   help="planner methods: the notebook's planner code or ruscuav_benchmark.planners "
+                        "(which always runs in ruscuav_benchmark.env)")
     args = p.parse_args()
 
     archive, work = args.archive.resolve(), args.work.resolve()
@@ -318,7 +377,7 @@ def main() -> int:
     if args.rerun_csv is not None:
         rerun = read_csv(args.rerun_csv)
         if args.method in PLANNERS:
-            archived = read_csv(archive / PLANNER_ARCHIVE.format(name=args.method))
+            archived = read_csv(archive / planner_archive(args.method))
         elif args.method in REAL_PLANNERS:
             archived = read_csv(archive / REAL_PLANNERS[args.method][1])
         elif args.method.startswith("REWARD_FACTOR:"):
@@ -339,16 +398,24 @@ def main() -> int:
             given_cities.add(city)
         if args.method in REAL_PLANNERS and REAL_PLANNERS[args.method][0] not in given_cities:
             p.error(f"{args.method} needs --real-world {REAL_PLANNERS[args.method][0]}=PATH")
+        package = args.planners == "package"
+        if package and not (args.method in PLANNERS or args.method in REAL_PLANNERS):
+            p.error("--planners package applies to the planner methods only")
         ns = load_legacy_namespace(archive, work, extra_inputs=extra)
         if args.env == "refactored":
             use_refactored_env(ns)
         world = ns.UrbanWorldLayers.load_npz(ns.CANONICAL_WORLD_PATH)
         if args.method in PLANNERS:
             seed0 = 5000 if args.seed0 is None else args.seed0
-            archived, rerun, info = run_planner(ns, world, args.method, args.episodes, seed0, archive)
+            if package:
+                archived = read_csv(archive / planner_archive(args.method))
+                rerun, info = run_package_planner(ns, ns.CANONICAL_WORLD_PATH, args.method, args.episodes, seed0, work)
+            else:
+                archived, rerun, info = run_planner(ns, world, args.method, args.episodes, seed0, archive)
         elif args.method in REAL_PLANNERS:
             seed0 = 7000 if args.seed0 is None else args.seed0
-            archived, rerun, info = run_real_planner(ns, args.method, args.episodes, seed0, archive, given_cities)
+            archived, rerun, info = run_real_planner(ns, args.method, args.episodes, seed0, archive, given_cities,
+                                                     package_work=work if package else None)
         elif args.method.startswith("PPO:"):
             _, method, seed = args.method.split(":", 2)
             run = "single_checkpoint" if seed == "single" else f"trainseed_{int(seed)}"
@@ -361,7 +428,12 @@ def main() -> int:
         else:
             p.error(f"Unknown method {args.method!r}")
 
-    env = None if args.rerun_csv is not None else args.env
+    if args.rerun_csv is not None:
+        env = None
+    elif args.planners == "package":
+        env = "package"
+    else:
+        env = args.env
     report = {"method": args.method, "env": env, "episodes": int(len(rerun)), "atol": args.atol,
               "rtol": args.rtol, **info, **compare_episodes(archived, rerun, args.atol, args.rtol),
               "elapsed_s": round(time.time() - t0, 1)}

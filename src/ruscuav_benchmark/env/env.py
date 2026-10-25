@@ -225,9 +225,47 @@ class RuscuavEnv(gym.Env):
     def _scan(self) -> None:
         self.cached_lidar, self.last_urban_lidar_min_norm = self.lidar.scan(self.current_pos, self.target_point)
 
+    def _endpoint(self, value: Any, name: str) -> np.ndarray:
+        """Mission endpoint from (x, y) or (x, y, z); a missing z is the cruise altitude."""
+        p = np.asarray(value, dtype=np.float64).reshape(-1)
+        if p.size not in (2, 3) or not np.all(np.isfinite(p)):
+            raise ValueError(f"{name} must be (x, y) or (x, y, z) in metres, got {value!r}")
+        x, y = float(p[0]), float(p[1])
+        if not (self.x_min <= x <= self.x_max and self.y_min <= y <= self.y_max):
+            raise ValueError(f"{name} ({x:g}, {y:g}) is outside the world [0, {self.x_max:g}] x [0, {self.y_max:g}]")
+        if p.size == 3:
+            z = float(p[2])
+        else:
+            d = self.config.dynamics
+            ground = self.dynamics.ground_at(x, y)
+            z = max(min(self.z_max, ground + d.cruise_agl_m), ground + d.min_agl_m)
+        if not (self.z_min <= z <= self.z_max):
+            raise ValueError(f"{name} altitude {z:g} m is outside [0, {self.z_max:g}] m")
+        return np.array([x, y, z], dtype=np.float32)
+
+    def _mission_from_options(self, options: Optional[Dict[str, Any]]) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+        if not options:
+            return None
+        unknown = sorted(set(options) - {"start", "target"})
+        if unknown:
+            raise ValueError(f"unknown reset options {unknown}; expected 'start' and 'target'")
+        if "start" not in options or "target" not in options:
+            raise ValueError("reset options need both 'start' and 'target'")
+        return self._endpoint(options["start"], "start"), self._endpoint(options["target"], "target")
+
     # ------------------------------------------------------------------ gym API
     def reset(self, seed: Optional[int] = None, options: Optional[Dict[str, Any]] = None
               ) -> Tuple[np.ndarray, Dict[str, Any]]:
+        """Start an episode with a mission sampled from ``seed``.
+
+        ``options={"start": (x, y[, z]), "target": (x, y[, z])}`` flies the given
+        mission instead (metres; a missing z is the cruise altitude above the
+        ground). The mission is still drawn first, so the random state is that of the
+        seed and a given mission equal to the drawn one reproduces the plain reset
+        exactly. Given endpoints are not rejected when unsafe; ``info`` reports their
+        safety and ``info["mission_source"] == "options"``.
+        """
+        given = self._mission_from_options(options)
         mission = self.config.mission
         attempts = mission.max_reset_attempts if mission.enforce_safe_start_target else 1
         safe, start_report, target_report = False, None, None
@@ -242,6 +280,12 @@ class RuscuavEnv(gym.Env):
             safe = bool(start_report["safe"] and target_report["safe"])
             if (not mission.enforce_safe_start_target) or safe:
                 break
+        if given is not None:
+            self.start_point, self.target_point = given
+            self._set_mission_axis()
+            start_report = endpoint_report(self.risk_model, self.start_point, mission.start_target_max_risk)
+            target_report = endpoint_report(self.risk_model, self.target_point, mission.start_target_max_risk)
+            safe = bool(start_report["safe"] and target_report["safe"])
 
         self.current_pos = self.start_point.copy()
         self.vel[:] = 0.0
@@ -263,6 +307,8 @@ class RuscuavEnv(gym.Env):
             "start_urban_reason": start_report["reason"],
             "target_urban_reason": target_report["reason"],
         }
+        if given is not None:
+            info["mission_source"] = "options"
 
         if self.dynamic_config is not None:
             dyn_seed = int(seed) if seed is not None else int(self.np_random.integers(0, 2**31 - 1))

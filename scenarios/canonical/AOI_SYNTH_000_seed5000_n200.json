@@ -6,15 +6,36 @@
     5000,
     5199
   ],
+  "world_file": {
+    "name": "AOI_FAKE_001_urban_world_layers.npz",
+    "bytes": 14638735,
+    "sha256": "ccb113c5d4ccbc91f35ac2f9d527a62a6c8f419d83976fd25f34e03dc3f449f6"
+  },
+  "world_layers_sha256": "be2bdac959eb9507598b77f8f0531dedf73e4f723bfacf162ea0cb9c4f785be4",
+  "archived_world_file": {
+    "path": "worlds/AOI_FAKE_001_urban_world_layers.npz",
+    "bytes": 14638735,
+    "sha256": "ccb113c5d4ccbc91f35ac2f9d527a62a6c8f419d83976fd25f34e03dc3f449f6",
+    "listed_in": "reproducibility/v1_environment_and_audit/manifests/ASSET_INDEX.csv"
+  },
   "environment": "make_ruscuav_env_m4_mode(stage='B', mode='strict_eval', risk_profile='balanced', n_obstacles=0)",
   "variants_cross_checked": [
-    "GEO-RL",
-    "OBS-RL",
-    "RISK+GREEN-RL",
-    "RISK+OBS-RL"
+    "make_static_eval_env('GEO-RL', primary_no_terminal)",
+    "make_static_eval_env('OBS-RL', primary_no_terminal)",
+    "make_static_eval_env('RISK+GREEN-RL', primary_no_terminal)",
+    "make_static_eval_env('RISK+OBS-RL', primary_no_terminal)",
+    "ruscuav_benchmark.env.make_env('GEO-RL', regime='primary_no_terminal')",
+    "ruscuav_benchmark.env.make_env('OBS-RL', regime='primary_no_terminal')",
+    "ruscuav_benchmark.env.make_env('RISK-RL', regime='primary_no_terminal')",
+    "ruscuav_benchmark.env.make_env('GREEN-RL', regime='primary_no_terminal')",
+    "ruscuav_benchmark.env.make_env('RISK+GREEN-RL', regime='primary_no_terminal')",
+    "ruscuav_benchmark.env.make_env('RISK+OBS-RL', regime='primary_no_terminal')",
+    "ruscuav_benchmark.env.make_env('DYN-RISK-RL', regime='primary_no_terminal')",
+    "ruscuav_benchmark.env.make_env('DYN-OBS-RL', regime='primary_no_terminal')",
+    "ruscuav_benchmark.env.make_env('RISK+OBS-RL', regime='secondary_operational_stopping')"
   ],
   "archived_planned_paths_checked": 200,
   "problems": [],
   "z_note": "start_z/target_z are absolute altitudes in metres, in the same height frame as the world's terrain_z.",
-  "created_at": "2026-10-25T08:35:37+00:00"
+  "created_at": "2026-10-25T17:51:11+00:00"
 }

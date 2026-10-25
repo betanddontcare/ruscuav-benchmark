@@ -117,6 +117,12 @@ def test_scenario_filter_accepts_legacy_world_id(tmp_path):
     assert [r["scenario_id"] for r in read_scenarios(csv_path, world_id="AOI_SYNTH_000")] == ["a", "b"]
 
 
+def test_scenario_file_without_world_column_belongs_to_any_world(tmp_path):
+    csv_path = tmp_path / "s.csv"
+    csv_path.write_text("seed,start_x,start_y,target_x,target_y\n7,1,1,600,2\n", encoding="utf-8")
+    assert [r["seed"] for r in read_scenarios(csv_path, world_id="AOI_SYNTH_000")] == ["7"]
+
+
 @pytest.mark.skipif(not BUNDLED, reason="bundled worlds not present")
 @pytest.mark.parametrize("path", BUNDLED, ids=lambda p: p.parent.name)
 def test_bundled_worlds_use_current_schema(path):
