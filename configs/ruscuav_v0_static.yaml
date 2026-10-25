@@ -1,0 +1,27 @@
+benchmark: RUSCUAV-v0
+regime: static
+worlds:
+  - AOI_SYNTH_001
+  - AOI_SYNTH_002
+  - AOI_SYNTH_003
+grid:
+  resolution_m: 1.0
+  width: 1000
+  height: 1000
+risk:
+  profile: balanced
+  planner_agl_m: 40.0
+  risk_lambda: 0.05
+planner:
+  method: M9_static_risk_Astar
+  plan_res_m: 10.0
+evaluation:
+  dt_s: 0.5
+  path_speed_mps: 10.0
+  success_radius_m: 30.0
+  cargo_min: 0.80
+  road_budget_s: 20.0
+  pedestrian_budget_s: 5.0
+  building_budget_s: 15.0
+  sensitive_budget_s: 0.0
+  strict_hard_violations: true

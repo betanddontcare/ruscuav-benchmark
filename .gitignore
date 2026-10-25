@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv*/
+venv*/
+.pytest_cache/
+
+# Local outputs
+runs/
+outputs/
+
+# Archive assets live on Zenodo, not in git (see docs/REPRODUCIBILITY.md)
+experiments/
+paper_ready_v2/
+provenance/
+reproducibility/
+results/
+models/*.zip
+paper/
+source_code/

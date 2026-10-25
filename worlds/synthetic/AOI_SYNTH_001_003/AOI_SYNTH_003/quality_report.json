@@ -1,0 +1,155 @@
+{
+  "passed": true,
+  "summary": {
+    "aoi_id": "AOI_SYNTH_003",
+    "crs": "LOCAL_METRIC_SYNTHETIC",
+    "bbox": [
+      0.0,
+      0.0,
+      1000.0,
+      1000.0
+    ],
+    "resolution_m": 1.0,
+    "shape": [
+      1000,
+      1000
+    ],
+    "terrain_z": {
+      "count": 1000000,
+      "min": 8.676834106445312,
+      "mean": 15.456576347351074,
+      "median": 15.62264633178711,
+      "max": 21.3231258392334
+    },
+    "surface_z": {
+      "count": 1000000,
+      "min": 8.735976219177246,
+      "mean": 22.005474090576172,
+      "median": 17.08956527709961,
+      "max": 73.65200805664062
+    },
+    "height_above_ground": {
+      "count": 1000000,
+      "min": 0.0,
+      "mean": 6.548898220062256,
+      "median": 0.0,
+      "max": 54.70187759399414
+    },
+    "building_mask": {
+      "pixels": 159155,
+      "coverage": 0.159155
+    },
+    "road_mask": {
+      "pixels": 66856,
+      "coverage": 0.066856
+    },
+    "sidewalk_mask": {
+      "pixels": 62742,
+      "coverage": 0.062742
+    },
+    "green_mask": {
+      "pixels": 176969,
+      "coverage": 0.176969
+    },
+    "canopy_mask": {
+      "pixels": 115049,
+      "coverage": 0.115049
+    },
+    "sensitive_mask": {
+      "pixels": 31413,
+      "coverage": 0.031413
+    },
+    "building_height_over_buildings": {
+      "count": 159155,
+      "min": 9.110724449157715,
+      "mean": 29.952360153198242,
+      "median": 27.578834533691406,
+      "max": 54.701873779296875
+    },
+    "canopy_height_over_canopy": {
+      "count": 115049,
+      "min": 7.000211238861084,
+      "mean": 15.487579345703125,
+      "median": 15.495420455932617,
+      "max": 23.99992561340332
+    }
+  },
+  "overlap": {
+    "passed": true,
+    "checks": {
+      "building__road": {
+        "pixels": 0,
+        "coverage": 0.0,
+        "hard_zero": true
+      },
+      "building__sidewalk": {
+        "pixels": 0,
+        "coverage": 0.0,
+        "hard_zero": true
+      },
+      "building__green": {
+        "pixels": 0,
+        "coverage": 0.0,
+        "hard_zero": true
+      },
+      "road__green": {
+        "pixels": 0,
+        "coverage": 0.0,
+        "hard_zero": true
+      },
+      "road__sidewalk": {
+        "pixels": 0,
+        "coverage": 0.0,
+        "hard_zero": true
+      },
+      "sidewalk__green": {
+        "pixels": 0,
+        "coverage": 0.0,
+        "hard_zero": true
+      },
+      "canopy_outside_green": {
+        "pixels": 0,
+        "coverage": 0.0,
+        "hard_zero": true
+      },
+      "sensitive__building": {
+        "pixels": 1399,
+        "coverage": 0.001399,
+        "hard_zero": false
+      },
+      "sensitive__road": {
+        "pixels": 1301,
+        "coverage": 0.001301,
+        "hard_zero": false
+      },
+      "sensitive__sidewalk": {
+        "pixels": 1754,
+        "coverage": 0.001754,
+        "hard_zero": false
+      },
+      "sensitive__green": {
+        "pixels": 17916,
+        "coverage": 0.017916,
+        "hard_zero": false
+      }
+    }
+  },
+  "height": {
+    "passed": true,
+    "checks": {
+      "surface_below_terrain_pixels": 0,
+      "negative_height_above_ground_pixels": 0,
+      "building_height_negative_pixels": 0,
+      "canopy_height_negative_pixels": 0,
+      "building_mask_without_height_pixels": 0,
+      "canopy_mask_without_height_pixels": 0
+    }
+  },
+  "risk_profile": "balanced",
+  "risk_summary": {
+    "min": 0.0,
+    "mean": 3.24286150932312,
+    "median": 0.0,
+    "max": 62.0
+  }
+}

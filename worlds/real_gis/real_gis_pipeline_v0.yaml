@@ -1,0 +1,19 @@
+# Real-GIS AOI construction profile.
+# The paper uses Vienna Prater/Leopoldstadt and Warsaw Centrum as probes.
+# Fill bbox fields explicitly before rebuilding worlds; do not rely on hidden notebook state.
+defaults:
+  grid_size: [1000, 1000]
+  resolution_m: 1.0
+  pedestrian_interpretation: explicit_footway
+  source: OpenStreetMap-derived vector layers
+required_layers:
+  - buildings
+  - highways
+  - pedestrian_ways
+  - green_areas
+  - sensitive_pois
+aois:
+  Vienna_Prater_Leopoldstadt_footway:
+    status: requires_explicit_bbox_or_center_radius
+  Warsaw_Centrum_footway:
+    status: requires_explicit_bbox_or_center_radius

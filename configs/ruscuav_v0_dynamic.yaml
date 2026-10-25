@@ -1,0 +1,14 @@
+benchmark: RUSCUAV-v0
+regime: dynamic-risk-proxy
+inherits: configs/ruscuav_v0_static.yaml
+dynamic_risk:
+  n_hotspots: 12
+  altitude_decay_m: 60.0
+  dynamic_budget: 10.0
+  hotspot_sigma_m_range: [25.0, 80.0]
+  hotspot_amplitude_range: [4.0, 18.0]
+  hotspot_period_s_range: [60.0, 240.0]
+  hotspot_duty_range: [0.25, 0.75]
+outputs:
+  report_dynamic_budget_satisfaction: true
+  report_tail_statistics: [p50, p75, p90, p95, p99, max]

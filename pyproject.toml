@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ruscuav-benchmark"
+version = "0.1.0"
+description = "Semantic mission-acceptability benchmark for low-altitude urban cargo-UAV navigation"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT for code; CC-BY-4.0 for data and documentation"}
+authors = [
+  {name = "Igor Betkier"},
+  {name = "Mateusz Oszczypała"}
+]
+keywords = ["UAV", "urban navigation", "semantic risk", "mission acceptability", "benchmark"]
+dependencies = [
+  "numpy>=1.23",
+  "matplotlib>=3.7",
+  "pyyaml>=6.0"
+]
+
+[project.urls]
+Homepage = "https://zenodo.org/"
+
+[project.scripts]
+ruscuav-evaluate = "ruscuav_benchmark.evaluate:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

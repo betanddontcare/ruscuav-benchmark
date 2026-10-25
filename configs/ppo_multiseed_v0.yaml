@@ -1,0 +1,44 @@
+# RUSCUAV PPO multi-seed reproduction profile for paper headline learned baselines.
+# Requires stable-baselines3, gymnasium, torch, and the definitions module extracted from TOP_UAV.
+train_seeds: [1001, 2001, 3001, 4001, 5001]
+evaluation:
+  seed0: 5000
+  episodes: 200
+  deterministic: true
+  mode: strict_eval
+  max_steps: 1000
+  n_obstacles: 0
+methods:
+  M7_geometry_only:
+    total_steps: 200000
+  M8_obs_only:
+    stages: {A: 50000, B: 75000, C: 75000}
+  M8_reward_only:
+    description: combined risk+green reward shaping
+    stages: {A: 50000, B: 75000, C: 75000}
+  M11C_dynamic_obs_reward_only:
+    stages: {A: 50000, B: 75000, C: 75000}
+    dynamic_risk:
+      n_hotspots: 16
+      hotspot_mode: road_sidewalk
+      radius_m_min: 60.0
+      radius_m_max: 140.0
+      amplitude_min: 15.0
+      amplitude_max: 40.0
+      start_step_min: 0
+      start_step_max: 180
+      duration_min_steps: 120
+      duration_max_steps: 350
+      temporal_mode: hann
+      altitude_h_scale_m: 70.0
+      dynamic_cumulative_risk_budget: 10.0
+      dynamic_risk_lambda: 0.20
+      dynamic_norm_denom: 10.0
+optional_methods:
+  M6_full_semantic:
+    stages: {A: 150000, B: 250000, C: 400000}
+sb3:
+  policy: MlpPolicy
+  n_envs: 4
+  device: cpu
+  save_freq_steps: 10000

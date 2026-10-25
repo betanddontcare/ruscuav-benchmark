@@ -1,0 +1,32 @@
+cff-version: 1.2.0
+title: "RUSCUAV v2.0.0: Semantic Mission-Acceptability Benchmark for Low-Altitude Urban Cargo-UAV Navigation"
+message: "Please cite the version-specific Zenodo DOI assigned to v2.0.0 and the associated manuscript."
+type: dataset
+authors:
+  - family-names: Betkier
+    given-names: Igor
+    orcid: "https://orcid.org/0000-0002-5437-7669"
+    affiliation: "Faculty of Civil Engineering and Geodesy, Military University of Technology, gen. Sylwestra Kaliskiego Street 2, 00-908 Warsaw, Poland"
+    email: "igor.betkier@wat.edu.pl"
+  - family-names: Oszczypała
+    given-names: Mateusz
+    orcid: "https://orcid.org/0000-0002-1194-6913"
+    affiliation: "Faculty of Civil Engineering and Geodesy, Military University of Technology, gen. Sylwestra Kaliskiego Street 2, 00-908 Warsaw, Poland"
+    email: "mateusz.oszczypala@wat.edu.pl"
+version: "2.0.0"
+date-released: "2026-07-24"
+license: CC-BY-4.0
+keywords:
+  - unmanned aerial vehicle
+  - urban cargo-UAV navigation
+  - mission acceptability
+  - semantic risk assessment
+  - risk-aware path planning
+  - safety-supervised reinforcement learning
+  - dynamic ground risk
+  - real-GIS simulation
+abstract: >-
+  Reproducibility release containing the RUSCUAV benchmark code, synthetic worlds,
+  trained PPO weights, primary no-terminal and secondary operational-stopping
+  per-episode results, planner outputs, provenance, final tables and figures,
+  and the manuscript and supplementary material.

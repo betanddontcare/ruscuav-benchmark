@@ -1,0 +1,28 @@
+{
+  "aoi_id": "warsaw_centrum_osm_1km_v1",
+  "created_at": "2026-07-01T07:41:54.818528",
+  "shape": [
+    1000,
+    1000
+  ],
+  "resolution_m": 1.0,
+  "crs": "LOCAL_RUSCUAV_0_1000",
+  "coverage": {
+    "building": 0.35375499725341797,
+    "road": 0.2122199982404709,
+    "sidewalk": 0.2199690043926239,
+    "green": 0.1168769970536232,
+    "canopy": 0.044620998203754425,
+    "sensitive": 0.33661600947380066
+  },
+  "height_above_ground": {
+    "min": 0.0,
+    "mean": 11.653122901916504,
+    "max": 150.0
+  },
+  "notes": [
+    "Manual NPZ v2 save used for compatibility with current UrbanWorldLayers class.",
+    "height_above_ground included.",
+    "height/width/shape are treated as derived properties."
+  ]
+}

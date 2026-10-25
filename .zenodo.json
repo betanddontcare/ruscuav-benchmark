@@ -1,0 +1,44 @@
+{
+  "title": "RUSCUAV v2.0.0: Semantic Mission-Acceptability Benchmark for Low-Altitude Urban Cargo-UAV Navigation",
+  "upload_type": "dataset",
+  "publication_date": "2026-07-24",
+  "description": "RUSCUAV v2.0.0 is the reproducibility release for a semantic mission-acceptability benchmark for low-altitude urban cargo-UAV navigation. It contains source code, synthetic worlds, trained PPO weights, primary no-terminal and secondary operational-stopping per-episode results, static and dynamic planners, five-seed policy evaluations, multi-world morphology-shift results, Vienna/Warsaw real-GIS simulation outputs, paper-ready tables and figures, complete Holm families, provenance manifests, and the manuscript and supplementary PDFs. Processed Vienna/Warsaw NPZ worlds are excluded; generation scripts and AOI metadata are included.",
+  "creators": [
+    {
+      "name": "Betkier, Igor",
+      "orcid": "0000-0002-5437-7669",
+      "affiliation": "Faculty of Civil Engineering and Geodesy, Military University of Technology, gen. Sylwestra Kaliskiego Street 2, 00-908 Warsaw, Poland"
+    },
+    {
+      "name": "Oszczypała, Mateusz",
+      "orcid": "0000-0002-1194-6913",
+      "affiliation": "Faculty of Civil Engineering and Geodesy, Military University of Technology, gen. Sylwestra Kaliskiego Street 2, 00-908 Warsaw, Poland"
+    }
+  ],
+  "keywords": [
+    "unmanned aerial vehicle",
+    "urban cargo-UAV navigation",
+    "mission acceptability",
+    "semantic risk assessment",
+    "risk-aware path planning",
+    "safety-supervised reinforcement learning",
+    "PPO",
+    "dynamic ground risk",
+    "real-GIS simulation",
+    "OpenStreetMap",
+    "reproducibility benchmark"
+  ],
+  "license": "cc-by-4.0",
+  "version": "2.0.0",
+  "language": "eng",
+  "access_right": "open",
+  "related_identifiers": [
+    {
+      "scheme": "doi",
+      "identifier": "10.5281/zenodo.21331403",
+      "relation": "isNewVersionOf",
+      "resource_type": "dataset"
+    }
+  ],
+  "notes": "Mixed-license release: code and executable scripts are MIT; data, trained weights, results, figures, documentation and paper files are CC BY 4.0. Real-GIS processed NPZ files are not included. OpenStreetMap attribution is required for regenerated real-GIS data. Funding: none."
+}

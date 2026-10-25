@@ -1,0 +1,28 @@
+{
+  "aoi_id": "vienna_prater_leopoldstadt_osm_1km_v1_footway_only",
+  "created_at": "2026-07-01T07:46:48.210352",
+  "shape": [
+    1000,
+    1000
+  ],
+  "resolution_m": 1.0,
+  "crs": "LOCAL_RUSCUAV_0_1000",
+  "coverage": {
+    "building": 0.24176999926567078,
+    "road": 0.15077300369739532,
+    "sidewalk": 0.11026500165462494,
+    "green": 0.2994470000267029,
+    "canopy": 0.1241770014166832,
+    "sensitive": 0.13527700304985046
+  },
+  "height_above_ground": {
+    "min": 0.0,
+    "mean": 5.066247463226318,
+    "max": 117.00000762939453
+  },
+  "notes": [
+    "Manual NPZ v2 save used for compatibility with current UrbanWorldLayers class.",
+    "height_above_ground included.",
+    "height/width/shape are treated as derived properties."
+  ]
+}

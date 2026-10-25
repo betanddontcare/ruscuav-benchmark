@@ -1,0 +1,16 @@
+{
+  "aoi_id": "AOI_SYNTH_002",
+  "name": "RUSCUAV synthetic benchmark world AOI_SYNTH_002",
+  "crs": "LOCAL_METRIC_SYNTHETIC",
+  "bbox": [
+    0.0,
+    0.0,
+    1000.0,
+    1000.0
+  ],
+  "resolution_m": 1.0,
+  "world_npz_path": "urban_world_layers.npz",
+  "generator": "ruscuav_benchmark.synthetic.create_synthetic_world",
+  "seed": 123,
+  "notes": "Synthetic canonical raster world for RUSCUAV-v0 benchmark release."
+}

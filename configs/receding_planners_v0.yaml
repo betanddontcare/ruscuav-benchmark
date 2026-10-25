@@ -1,0 +1,21 @@
+# RUSCUAV planning-baseline reproduction profile.
+static_M9:
+  plan_res_m: 5.0
+  planner_agl_m: 40.0
+  risk_lambda: 0.35
+  use_astar: true
+receding_M10:
+  plan_res_m: 5.0
+  planner_agl_m: 40.0
+  risk_lambda: 0.35
+  use_astar: true
+  sensing_radius_m: 75.0
+  replan_every_steps: 5
+  prior_risk_mode: mean
+  hard_blockers_known: true
+  waypoint_radius_m: 8.0
+  target_speed_mps: 12.0
+  max_steps: 1000
+dynamic_M11:
+  inherits: receding_M10
+  dynamic_risk_budget: 10.0

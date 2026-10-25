@@ -1,0 +1,51 @@
+{
+  "aoi_id": "vienna_prater_leopoldstadt_osm_1km_v1",
+  "created_at": "2026-07-01T07:46:30.155275",
+  "shape": [
+    1000,
+    1000
+  ],
+  "resolution_m": 1.0,
+  "crs": "LOCAL_RUSCUAV_0_1000",
+  "coverage": {
+    "building": 0.24176999926567078,
+    "road": 0.15077300369739532,
+    "sidewalk": 0.17423999309539795,
+    "green": 0.2994470000267029,
+    "canopy": 0.1241770014166832,
+    "sensitive": 0.13527700304985046
+  },
+  "height_above_ground": {
+    "min": 0.0,
+    "mean": 5.066247463226318,
+    "max": 117.00000762939453
+  },
+  "notes": [
+    "Manual NPZ v2 save used for compatibility with current UrbanWorldLayers class.",
+    "height_above_ground included.",
+    "height/width/shape are treated as derived properties."
+  ],
+  "center_lat": 48.2152,
+  "center_lon": 16.3975,
+  "aoi_size_m": 1000.0,
+  "metric_bounds_utm": [
+    603311.7866921963,
+    5340663.372400162,
+    604311.7866921963,
+    5341663.372400162
+  ],
+  "wgs_bbox": {
+    "north": 48.21977870428312,
+    "south": 48.210620923915215,
+    "east": 16.4043518449135,
+    "west": 16.390649332876446
+  },
+  "utm_crs": "EPSG:32633",
+  "role": "mixed urban-green validation AOI",
+  "source": {
+    "osm": true,
+    "dem_tif_path": null,
+    "dsm_tif_path": null,
+    "terrain_fallback_used": true
+  }
+}
