@@ -43,8 +43,9 @@ PLANNERS = {
 PLANNER_ARCHIVE = "experiments/paperA_primary_no_terminal_static_planners/eval/primary_no_terminal_{name}_n200_seed5000/primary_no_terminal_{name}_n200_seed5000_episodes.csv"
 PPO_ARCHIVE = "experiments/paperA_submission_repair_v1/primary_no_terminal/static/{method}/{run}"
 
-#: Wall-clock measurements differ between machines and are not compared.
-IGNORED_COLUMNS = {"total_plan_time_s", "mean_plan_time_s", "last_plan_time_s"}
+#: Not compared: wall-clock measurements differ between machines, and "episode" is a
+#: run-local counter (rows are matched by seed, so a run may start at any seed).
+IGNORED_COLUMNS = {"episode", "total_plan_time_s", "mean_plan_time_s", "last_plan_time_s"}
 
 
 def sha256_file(path: Path) -> str:
@@ -53,6 +54,15 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def read_csv(path) -> pd.DataFrame:
+    """Read a CSV with exact float parsing.
+
+    pandas' default parser can be off in the last bit, which would show up as
+    spurious 1e-16 differences between identical values.
+    """
+    return pd.read_csv(path, float_precision="round_trip")
 
 
 def _as_float(value):
@@ -119,7 +129,7 @@ def run_planner(ns, world, name: str, n: int, seed0: int, archive: Path) -> tupl
     )
     kwargs["planner_config" if evaluator.startswith("evaluate_m9") else "cfg"] = cfg
     rerun, _, csv_path, _ = getattr(ns, evaluator)(**kwargs)
-    archived = pd.read_csv(archive / PLANNER_ARCHIVE.format(name=name))
+    archived = read_csv(archive / PLANNER_ARCHIVE.format(name=name))
     return archived, rerun, {"rerun_csv": str(csv_path), "config": getattr(ns, cfg_name)}
 
 
@@ -142,7 +152,7 @@ def run_ppo(ns, world, method: str, run: str, n: int, archive: Path, work: Path)
         deterministic=bool(protocol["deterministic"]),
         save_paths=True,
     )
-    archived = pd.read_csv(run_dir / "episodes.csv")
+    archived = read_csv(run_dir / "episodes.csv")
     return archived, rerun, {"rerun_csv": str(csv_path), "model_path": str(model_path), "model_sha256": actual_sha}
 
 
@@ -167,13 +177,13 @@ def main() -> int:
     t0 = time.time()
 
     if args.rerun_csv is not None:
-        rerun = pd.read_csv(args.rerun_csv)
+        rerun = read_csv(args.rerun_csv)
         if args.method in PLANNERS:
-            archived = pd.read_csv(archive / PLANNER_ARCHIVE.format(name=args.method))
+            archived = read_csv(archive / PLANNER_ARCHIVE.format(name=args.method))
         else:
             _, method, seed = args.method.split(":", 2)
             run = "single_checkpoint" if seed == "single" else f"trainseed_{int(seed)}"
-            archived = pd.read_csv(archive / PPO_ARCHIVE.format(method=method, run=run) / "episodes.csv")
+            archived = read_csv(archive / PPO_ARCHIVE.format(method=method, run=run) / "episodes.csv")
         info = {"rerun_csv": str(args.rerun_csv)}
     else:
         ns = load_legacy_namespace(archive, work)

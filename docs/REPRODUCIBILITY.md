@@ -62,10 +62,11 @@ Check performed on 2026-10-25 (Python 3.12, NumPy 2.0.2, SciPy 1.16.3, Gymnasium
 1.2.3, Stable-Baselines3 2.8.0 and PyTorch 2.11.0, matching the versions recorded in
 the archived checkpoints):
 
-| Method | Episodes | Result |
+| Method | Episodes (seeds) | Result |
 |---|---|---|
-| STATIC_Astar, LOCAL_RH_Astar, FULL_RH_Astar | 5 each | All compared columns (26–34) identical; largest difference 2e-12. |
-| PPO RISK+GREEN-RL (train seed 4001), GEO-RL (train seed 1001) | 5 each | Termination, success, acceptability, step counts, exposure times and cumulative risk identical; positions within 0.2 mm. |
+| STATIC_Astar | 13 (5000–5004, 5100–5107) | Identical: the re-run CSV rows match the archived rows character for character, apart from the episode counter and planning wall-clock times. |
+| LOCAL_RH_Astar, FULL_RH_Astar | 5 each (5000–5004) | Identical, as above. |
+| PPO RISK+GREEN-RL (train seed 4001), GEO-RL (1001), OBS-RL (2001) | 5, 5, 3 | Termination, success, acceptability, step counts and exposure times identical; cumulative risk equal to within 4e-15; positions within 0.2 mm; total reward within 0.003. |
 
 The PPO position differences come from float32 arithmetic in the policy network:
 the archive was produced with the CPU-only PyTorch wheel, the check used the CUDA
