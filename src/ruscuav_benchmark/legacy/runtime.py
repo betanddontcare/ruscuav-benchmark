@@ -45,10 +45,11 @@ ARCHIVE_TO_DRIVE: Mapping[str, str] = {
 
 
 #: Statements from notebook execution cells that set module-level state which later
-#: definitions rely on (for example as default argument values). The definitions-only
-#: extraction dropped them, so they are re-inserted, in memory, directly before the
-#: first definition that needs them.
-#: Entries: (line at column 0 to insert before, code to insert, notebook cell of origin).
+#: definitions rely on (for example as default argument values or registry entries).
+#: The definitions-only extraction dropped them, so they are re-inserted, in memory,
+#: where the notebook ran them: directly before the next definition in notebook order.
+#: Entries: (text at column 0 to insert before, which must occur exactly once after a
+#: blank line; code to insert, one simple statement per line; notebook cell of origin).
 NOTEBOOK_STATE_PATCHES = (
     (
         "def rasterize_mask(",
@@ -63,6 +64,44 @@ NOTEBOOK_STATE_PATCHES = (
         "target_speed_mps=12.0, max_steps=1000)\n",
         "M13 / BLOCK 2 (telemetry rollouts for gate candidate mining)",
     ),
+    (
+        # The second definition of the factory, which reads urban_risk_lambda_mult.
+        'def make_ruscuav_m8_ablation_env_m4_mode(\n    world,\n    variant_name,\n    stage="A",\n'
+        '    mode="fast_train",\n    risk_profile="balanced",\n    n_obstacles=0,\n    seed=None,\n'
+        "):\n    if variant_name not in M8_VARIANTS:",
+        'M8_VARIANTS["risk_only"] = {"include_urban_vector_obs": False, "use_urban_risk_costs": True, '
+        '"urban_risk_lambda_mult": 1.0, "green_bonus_lambda": 0.0, "urban_lidar_enabled": True, '
+        '"urban_action_shield_enabled": True, "urban_geometric_shield_enabled": True, '
+        '"description": "No semantic vector; semantic risk penalty active; green bonus disabled."}\n'
+        'M8_VARIANTS["green_only"] = {"include_urban_vector_obs": False, "use_urban_risk_costs": True, '
+        '"urban_risk_lambda_mult": 0.0, "green_bonus_lambda": 0.03, "urban_lidar_enabled": True, '
+        '"urban_action_shield_enabled": True, "urban_geometric_shield_enabled": True, '
+        '"description": "No semantic vector; semantic risk penalty disabled; green bonus active."}\n'
+        # The cell's `if "urban_risk_lambda_mult" not in ...: ... = 1.0`, as one simple statement.
+        'M8_VARIANTS["reward_only"].setdefault("urban_risk_lambda_mult", 1.0)\n',
+        "ANALYSIS 5 / 6.1 (reward-factor variants risk_only and green_only)",
+    ),
+    (
+        "def ma_pick_reward_model_path():",
+        'M8_VARIANTS["reward_only_full_stack_diag"] = {"include_urban_vector_obs": False, '
+        '"use_urban_risk_costs": True, "urban_risk_lambda_mult": 1.0, "green_bonus_lambda": 0.03, '
+        '"urban_lidar_enabled": True, "urban_action_shield_enabled": True, '
+        '"urban_geometric_shield_enabled": True, "description": "Reward-only policy eval; full shield stack."}\n'
+        'M8_VARIANTS["reward_only_no_action_shield_diag"] = {"include_urban_vector_obs": False, '
+        '"use_urban_risk_costs": True, "urban_risk_lambda_mult": 1.0, "green_bonus_lambda": 0.03, '
+        '"urban_lidar_enabled": True, "urban_action_shield_enabled": False, '
+        '"urban_geometric_shield_enabled": True, "description": "Reward-only policy eval; action shield disabled."}\n'
+        'M8_VARIANTS["reward_only_no_geom_shield_diag"] = {"include_urban_vector_obs": False, '
+        '"use_urban_risk_costs": True, "urban_risk_lambda_mult": 1.0, "green_bonus_lambda": 0.03, '
+        '"urban_lidar_enabled": True, "urban_action_shield_enabled": True, '
+        '"urban_geometric_shield_enabled": False, "description": "Reward-only policy eval; geometric shield disabled."}\n'
+        'M8_VARIANTS["reward_only_no_shields_diag"] = {"include_urban_vector_obs": False, '
+        '"use_urban_risk_costs": True, "urban_risk_lambda_mult": 1.0, "green_bonus_lambda": 0.03, '
+        '"urban_lidar_enabled": True, "urban_action_shield_enabled": False, '
+        '"urban_geometric_shield_enabled": False, '
+        '"description": "Reward-only policy eval; both action and geometric shield disabled."}\n',
+        "ANALYSIS 6 (shield-diagnostic variants of the reward-only policy)",
+    ),
 )
 
 
@@ -73,11 +112,13 @@ def apply_notebook_state_patches(source: str) -> str:
     so line numbers in tracebacks still match ``definitions.py`` on disk.
     """
     for anchor, code, origin in NOTEBOOK_STATE_PATCHES:
-        position = source.find("\n\n" + anchor)
-        if position < 0:
+        occurrences = source.count("\n\n" + anchor)
+        if occurrences != 1:
             raise ValueError(
-                f"Patch anchor {anchor!r} ({origin}) not found after a blank line in the legacy source"
+                f"Patch anchor {anchor.splitlines()[0]!r} ({origin}) found {occurrences} times after a "
+                "blank line in the legacy source; expected exactly once"
             )
+        position = source.find("\n\n" + anchor)
         statements = "; ".join(line for line in code.splitlines() if line.strip())
         source = (
             source[: position + 1]

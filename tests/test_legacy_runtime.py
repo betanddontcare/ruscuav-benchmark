@@ -66,6 +66,28 @@ def test_state_patches_keep_line_numbers():
     for anchor, code, _ in runtime.NOTEBOOK_STATE_PATCHES:
         line_before_anchor = patched.split("\n" + anchor, 1)[0].rsplit("\n", 1)[1]
         assert line_before_anchor.startswith(code.split("=")[0].strip())
+    compile(patched, str(runtime.DEFINITIONS_PATH), "exec", dont_inherit=True)
+
+
+def test_state_patches_restore_the_notebook_m8_variants():
+    namespace = {"M8_VARIANTS": {"reward_only": {"green_bonus_lambda": 0.03}}}
+    for _, code, _ in runtime.NOTEBOOK_STATE_PATCHES:
+        if code.startswith("M8_VARIANTS"):
+            exec(code, namespace)
+    variants = namespace["M8_VARIANTS"]
+    assert list(variants) == [
+        "reward_only", "risk_only", "green_only", "reward_only_full_stack_diag",
+        "reward_only_no_action_shield_diag", "reward_only_no_geom_shield_diag", "reward_only_no_shields_diag",
+    ]
+    assert variants["reward_only"]["urban_risk_lambda_mult"] == 1.0
+    assert (variants["risk_only"]["urban_risk_lambda_mult"], variants["risk_only"]["green_bonus_lambda"]) == (1.0, 0.0)
+    assert (variants["green_only"]["urban_risk_lambda_mult"], variants["green_only"]["green_bonus_lambda"]) == (0.0, 0.03)
+
+
+def test_state_patch_anchors_must_be_unique():
+    source = runtime.DEFINITIONS_PATH.read_text(encoding="utf-8")
+    with pytest.raises(ValueError, match="found 2 times"):
+        runtime.apply_notebook_state_patches(source + "\n\ndef rasterize_mask(x):\n    return x\n")
 
 
 ARCHIVE = os.environ.get("RUSCUAV_ARCHIVE")

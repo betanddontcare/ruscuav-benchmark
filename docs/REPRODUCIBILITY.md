@@ -43,9 +43,12 @@ Operational-stopping reward-factor/shield diagnostics and the multi-world strict
 machine. It executes the legacy definitions and the submission-repair cells in one
 namespace, as the Colab notebook did, maps the hard-coded Google Drive paths to a
 local folder, and reads worlds and checkpoints from an extracted copy of the Zenodo
-archive without writing to it. Two notebook assignments that the definitions-only
-extraction had dropped (`OUT_SHAPE`/`LOCAL_TRANSFORM` and `m13_planner_cfg`) are
-restored in memory; the files on disk are unchanged.
+archive without writing to it. Notebook-cell statements that the definitions-only
+extraction had dropped are restored in memory, where the notebook ran them:
+`OUT_SHAPE`/`LOCAL_TRANSFORM`, `m13_planner_cfg`, and the reward-factor
+(`risk_only`, `green_only`) and shield-diagnostic entries of `M8_VARIANTS`, without
+which the RISK-RL and GREEN-RL environments cannot be created. The files on disk
+are unchanged.
 
 `scripts/legacy_parity.py` re-runs archived primary no-terminal episodes and compares
 them, column by column, with the archived per-episode CSVs:
@@ -73,6 +76,21 @@ The PPO position differences come from float32 arithmetic in the policy network:
 the archive was produced with the CPU-only PyTorch wheel, the check used the CUDA
 wheel running on CPU. `legacy_parity.py` therefore compares numbers with a relative
 tolerance of 1e-5 (`--rtol`), which these differences stay well within.
+
+The restored reward-factor variants were checked against the archived strict
+(stage C) reward-factor evaluations, `experiments/paperA_reward_factor_*`, with the
+notebook's own evaluation function: RISK-RL and GREEN-RL, training seeds 1001 and
+3001, episodes 5000–5002. In 10 of the 12 episodes everything matches within the
+tolerance. In GREEN-RL 3001, episode 5001, steps, termination and exposure match,
+but the final distance differs by 1.6 cm and the return by 0.19 (2e-5 relative). In
+RISK-RL 3001, episode 5001, the UAV gets pinned against the action shield near step
+60: the re-run slips free and succeeds at step 117, the archived run stays pinned
+until the stuck termination at step 358. The two trajectories coincide up to the
+pinning (cumulative risk 42.497 and cargo health 0.95937 in both). The episode is
+numerically chaotic there: scaling the policy output by 1 + N(0, 1e-4) noise
+reproduces the archived outcome in 6 of 6 runs, and 1e-3 noise gives success,
+stuck and shield-stuck outcomes. The difference therefore comes from float-level
+sensitivity, not from the restored configuration.
 
 `tests/test_legacy_runtime.py` re-runs one archived episode when `RUSCUAV_ARCHIVE`
 points to the extracted archive.
