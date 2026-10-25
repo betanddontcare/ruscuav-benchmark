@@ -71,6 +71,7 @@ the archived checkpoints):
 | LOCAL_RH_Astar | 11 (5000–5004, 5194–5199) | Identical, as above. |
 | FULL_RH_Astar | 10 (5000–5004, 5195–5199) | Identical, as above. |
 | PPO RISK+GREEN-RL (train seed 4001), GEO-RL (1001), OBS-RL (2001), RISK+OBS-RL (single checkpoint) | 5, 5, 3, 3 (from 5000) | Termination, success, acceptability, step counts and exposure times identical; cumulative risk equal to within 4e-15; positions within 0.2 mm; total reward within 0.003. |
+| VIENNA_FULL_RH_Astar, footway-only world (see "Real-GIS worlds") | 20 (7000–7019) | 19 rows identical, as above; in seed 7004 the cumulative risk differs by 1.4e-14 and the mean risk by 4e-16. |
 
 The PPO position differences come from float32 arithmetic in the policy network:
 the archive was produced with the CPU-only PyTorch wheel, the check used the CUDA
@@ -175,6 +176,69 @@ The canonical-world missions (seeds 5000–5199), which the archived runs sample
 inside `env.reset(seed)`, are recorded in
 `scenarios/canonical/AOI_SYNTH_000_seed5000_n200.csv` by
 `scripts/materialize_legacy_scenarios.py`.
+
+## Real-GIS worlds (Vienna, Warsaw)
+
+The processed Vienna and Warsaw worlds are derived from OpenStreetMap data and are
+not distributed (docs/OSM_ATTRIBUTION.md). The archived real-GIS evaluations used
+their footway-only variants, in which the sidewalk layer holds the OpenStreetMap
+footways minus roads and buildings. `legacy_parity.py` gives a world passed with
+`--real-world` to the notebook code under the footway-only file name the notebook
+looks for first, and records the world's SHA-256 and layers checksum
+(`UrbanWorldLayers.layers_sha256()`, docs/WORLD_NPZ_SCHEMA.md) in its report. Only
+the world of the city being re-run is needed:
+
+```bash
+python scripts/legacy_parity.py --archive /path/to/RUSCUAV-v2.0.0 --work runs/parity \
+    --method VIENNA_FULL_RH_Astar --episodes 20 \
+    --real-world vienna=/path/to/vienna_prater_leopoldstadt_osm_1km_v1_footway_only_urban_world_layers.npz
+```
+
+**Vienna.** The check used a copy of the footway-only world kept from the archived
+runs (file SHA-256 `d63f0622…`, layers checksum `fa99c571…`). It reproduces the 20
+archived primary planner episodes VIENNA_FULL_RH_Astar 7000–7019 (table above). In
+`RuscuavEnv` (`--env refactored`), episodes 7000–7004 give, character for
+character, the rows of the notebook environment.
+
+This copy is a later build of the world than the one in the v1 release. The file
+of the same name in the archive's v1 asset index (built 2 July 2026) has other
+bytes (13,061,714, SHA-256 `7044b314…`), and the world metadata archived on 1 July
+2026 (`worlds/real_gis/metadata/`) describes slightly different layers: this copy
+has 141 fewer road cells, 539 more sidewalk cells and one more building cell. The
+v2.0.0 primary Vienna evaluations, run one after another on 21 July 2026, used this
+later build. The M12C fine-tuning evaluations of early July 2026 ran on the earlier
+one: of the first five episodes of their stage C planner evaluation
+(`m12c_vienna_footway_only_m10_receding_astar_stageC_200`), this copy reproduces
+four exactly, and in seed 7001 the route differs.
+
+The missions of seeds 7000–7199 in this world, those of the primary evaluations,
+are recorded in
+`scenarios/real_gis/vienna_prater_leopoldstadt_osm_1km_v1_footway_only_seed7000_n200.csv`:
+
+```bash
+python scripts/materialize_legacy_scenarios.py --archive /path/to/RUSCUAV-v2.0.0 --work runs/scenarios \
+    --world /path/to/vienna_prater_leopoldstadt_osm_1km_v1_footway_only_urban_world_layers.npz \
+    --output scenarios/real_gis/vienna_prater_leopoldstadt_osm_1km_v1_footway_only_seed7000_n200.csv
+```
+
+For every seed, 19 environments sampled the same mission: the planner environment
+in stages B and C (the first one twice, from its factory and from `env.reset`), the
+four learned-policy evaluation environments of the primary regime, the four M12C
+environment variants (RISK+GREEN-RL and GEO-RL fine-tuning, stages B and C), and
+`RuscuavEnv` for all eight method presets and for the planner environment in the
+secondary regime. The JSON file next to the CSV records the world file and its
+layers checksum. The missions belong to a world with that checksum. A world
+rebuilt from current OpenStreetMap data will usually have another one; it can be
+evaluated with the same seeds, but its missions and results are then its own.
+With `RUSCUAV_VIENNA_WORLD` pointing to the world, `tests/test_env.py` checks the
+first missions against the CSV.
+
+**Warsaw.** The archived Warsaw runs used a footway-only world that the notebook
+built in memory (`real_world_footway_only`) and never saved. Its footway layer
+came from the OpenStreetMap download, not from the saved base world, so it cannot
+be rebuilt from the base world file, which reproduces only one of four archived
+planner episodes. The Warsaw missions can be recorded once a copy of the
+footway-only world is found.
 
 ## Full re-evaluation in Colab (original route)
 

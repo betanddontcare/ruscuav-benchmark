@@ -1,4 +1,6 @@
+from dataclasses import replace
 from pathlib import Path
+import json
 import sys
 
 import numpy as np
@@ -16,6 +18,12 @@ from ruscuav_benchmark.world import (
 
 REPO = Path(__file__).resolve().parents[1]
 BUNDLED = sorted((REPO / "worlds" / "synthetic").glob("**/urban_world_layers.npz"))
+CANONICAL = REPO / "worlds" / "synthetic" / "AOI_SYNTH_000" / "urban_world_layers.npz"
+#: layers_sha256() of the canonical world; the v2.0.0 file AOI_FAKE_001, whose aoi_id
+#: and CRS differ, has the same. Scenario files record checksums of this kind, so the
+#: function must not change.
+CANONICAL_LAYERS_SHA256 = "be2bdac959eb9507598b77f8f0531dedf73e4f723bfacf162ea0cb9c4f785be4"
+REAL_GIS_MISSIONS = sorted((REPO / "scenarios" / "real_gis").glob("*.csv"))
 
 
 @pytest.fixture()
@@ -51,6 +59,45 @@ def test_load_reports_missing_keys(tmp_path, small_world):
     np.savez(path, **payload)
     with pytest.raises(ValueError, match="canopy_top_z"):
         UrbanWorldLayers.load_npz(path)
+
+
+def test_layers_checksum_ignores_file_layout_and_metadata(tmp_path, small_world):
+    payload = small_world.to_npz_dict()
+    payload.update(aoi_id=np.array("OTHER"), crs=np.array("EPSG:2180"),
+                   bbox=np.array([5.0, 5.0, 125.0, 125.0], dtype=np.float32),
+                   meta_json=np.array('{"source": "elsewhere"}'))
+    payload["road_mask"] = payload["road_mask"].astype(np.uint8)
+    del payload["schema_version"]
+    path = tmp_path / "other.npz"
+    np.savez(path, **payload)  # uncompressed, other dtypes, identifiers and metadata
+    assert UrbanWorldLayers.load_npz(path).layers_sha256() == small_world.layers_sha256()
+
+
+def test_layers_checksum_changes_with_the_content(small_world):
+    reference = small_world.layers_sha256()
+    assert len(reference) == 64
+    assert replace(small_world, resolution_m=2.0).layers_sha256() != reference
+    swapped = replace(small_world, road_mask=small_world.sidewalk_mask, sidewalk_mask=small_world.road_mask)
+    assert swapped.layers_sha256() != reference
+    small_world.terrain_z[3, 4] += 0.5
+    assert small_world.layers_sha256() != reference
+
+
+@pytest.mark.skipif(not CANONICAL.exists(), reason="canonical world not present")
+def test_layers_checksum_of_the_canonical_world_is_stable():
+    assert UrbanWorldLayers.load_npz(CANONICAL).layers_sha256() == CANONICAL_LAYERS_SHA256
+
+
+@pytest.mark.parametrize("path", REAL_GIS_MISSIONS, ids=lambda p: p.stem)
+def test_recorded_real_gis_missions_name_their_world(path):
+    provenance = json.loads(path.with_suffix(".json").read_text(encoding="utf-8"))
+    rows = read_scenarios(path)
+    first, last = provenance["seeds"]
+    assert [int(r["seed"]) for r in rows] == list(range(first, last + 1))
+    assert {r["world_id"] for r in rows} == {provenance["world_id"]}
+    assert len(provenance["world_layers_sha256"]) == 64
+    assert len(provenance["world_file"]["sha256"]) == 64
+    assert provenance["problems"] == []
 
 
 def test_legacy_world_alias():

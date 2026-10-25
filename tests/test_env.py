@@ -40,6 +40,11 @@ from ruscuav_benchmark.env import legacy_factories  # noqa: E402
 WORLD_PATH = REPO / "worlds" / "synthetic" / "AOI_SYNTH_000" / "urban_world_layers.npz"
 GOLDEN_PATH = REPO / "tests" / "data" / "env_golden_AOI_SYNTH_000.json"
 MISSIONS_PATH = REPO / "scenarios" / "canonical" / "AOI_SYNTH_000_seed5000_n200.csv"
+VIENNA_MISSIONS_PATH = (REPO / "scenarios" / "real_gis"
+                        / "vienna_prater_leopoldstadt_osm_1km_v1_footway_only_seed7000_n200.csv")
+#: The processed Vienna world is not distributed (OpenStreetMap ODbL); point this to a
+#: copy of vienna_prater_leopoldstadt_osm_1km_v1_footway_only_urban_world_layers.npz.
+VIENNA_WORLD = os.environ.get("RUSCUAV_VIENNA_WORLD")
 EXACT = os.environ.get("RUSCUAV_EXACT_GOLDEN") == "1"
 TOL = {"rtol": 0.0, "atol": 0.0} if EXACT else {"rtol": 1e-6, "atol": 1e-6}
 
@@ -65,9 +70,9 @@ def _golden_cases():
     return json.loads(GOLDEN_PATH.read_text(encoding="utf-8"))["cases"]
 
 
-def test_reset_gives_the_recorded_canonical_missions(world):
-    with MISSIONS_PATH.open(newline="", encoding="utf-8") as f:
-        rows = list(csv.DictReader(f))[:4]
+def _assert_recorded_missions(world, missions_path: Path, n: int) -> None:
+    with missions_path.open(newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))[:n]
     env = make_env(world, "RISK+GREEN-RL", regime="primary_no_terminal")
     for row in rows:
         _, info = env.reset(seed=int(row["seed"]))
@@ -76,6 +81,19 @@ def test_reset_gives_the_recorded_canonical_missions(world):
         np.testing.assert_allclose(env.start_point, expected_start, atol=1e-5)
         np.testing.assert_allclose(env.target_point, expected_target, atol=1e-5)
         assert info["urban_safe_start_target"] == (row["safe_start_target"] == "True")
+
+
+def test_reset_gives_the_recorded_canonical_missions(world):
+    _assert_recorded_missions(world, MISSIONS_PATH, 4)
+
+
+@pytest.mark.skipif(not VIENNA_WORLD, reason="RUSCUAV_VIENNA_WORLD is not set (the Vienna world is not distributed)")
+def test_reset_gives_the_recorded_vienna_missions():
+    provenance = json.loads(VIENNA_MISSIONS_PATH.with_suffix(".json").read_text(encoding="utf-8"))
+    vienna = UrbanWorldLayers.load_npz(VIENNA_WORLD)
+    assert vienna.layers_sha256() == provenance["world_layers_sha256"], (
+        f"{VIENNA_WORLD} is not the world the missions were recorded in")
+    _assert_recorded_missions(vienna, VIENNA_MISSIONS_PATH, 8)
 
 
 @pytest.mark.parametrize("case_index", range(len(_golden_cases())))

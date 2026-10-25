@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass, asdict
 from pathlib import Path
@@ -173,6 +174,27 @@ class UrbanWorldLayers:
             if arr is not None and arr.shape != expected:
                 raise ValueError(f"Optional layer {name!r} has shape {arr.shape}, expected {expected}.")
         return True
+
+    def layers_sha256(self) -> str:
+        """SHA-256 checksum of the world content: the resolution and every layer array.
+
+        The layers are hashed as loaded (float32, masks as 0/1), so the checksum does
+        not depend on how the file was written (array dtypes, compression, key order)
+        or on the identifiers and metadata (``aoi_id``, ``crs``, ``bbox``,
+        ``schema_version``, ``meta``), none of which the environment reads. Two worlds
+        with the same checksum therefore give the same simulation, and a world rebuilt
+        from map data can be checked against the one a recorded run used.
+        """
+        h = hashlib.sha256(b"ruscuav-world-layers/1\n")
+        h.update(np.asarray(self.resolution_m, dtype="<f8").tobytes())
+        for name in REQUIRED_LAYER_KEYS + OPTIONAL_LAYER_KEYS:
+            arr = getattr(self, name)
+            if arr is None:
+                continue
+            arr = np.ascontiguousarray(arr, dtype="<f4")
+            h.update(f"\n{name} {'x'.join(str(n) for n in arr.shape)}\n".encode("ascii"))
+            h.update(arr.tobytes())
+        return h.hexdigest()
 
     def to_npz_dict(self) -> Dict[str, np.ndarray]:
         d: Dict[str, np.ndarray] = {

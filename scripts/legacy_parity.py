@@ -41,6 +41,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from ruscuav_benchmark.legacy.runtime import DRIVE_LITERAL, load_legacy_namespace  # noqa: E402
+from ruscuav_benchmark.world import UrbanWorldLayers  # noqa: E402
 
 PLANNERS = {
     # name: (legacy evaluator, reported-config global, config class)
@@ -64,11 +65,17 @@ REAL_PLANNERS = {
         "primary_no_terminal_Warsaw_FULL_RH_Astar_seed7000/primary_no_terminal_Warsaw_FULL_RH_Astar_seed7000_episodes.csv",
     ),
 }
-#: File names the notebook used for the processed real-GIS worlds on Drive.
+#: Drive names under which --real-world files are given to the notebook code. The
+#: archived runs used the footway-only worlds (sidewalk = footway - road - building),
+#: which the notebook's get_real_worlds() looks for first. The Vienna name is the
+#: notebook's; the Warsaw footway-only world was built in memory and never saved, so
+#: its name only has to match the notebook's search pattern.
 REAL_WORLD_DRIVE_NAMES = {
-    "vienna": "worlds/vienna_prater_leopoldstadt_osm_1km_v1_urban_world_layers.npz",
-    "warsaw": "worlds/warsaw_centrum_osm_1km_v1_urban_world_layers.npz",
+    "vienna": "worlds/vienna_prater_leopoldstadt_osm_1km_v1_footway_only_urban_world_layers.npz",
+    "warsaw": "worlds/warsaw_centrum_osm_1km_v1_footway_only_urban_world_layers.npz",
 }
+#: First global name get_real_worlds() checks for each city.
+REAL_WORLD_GLOBALS = {"vienna": "vienna_world_footway_only", "warsaw": "real_world_footway_only"}
 PPO_ARCHIVE = "experiments/paperA_submission_repair_v1/primary_no_terminal/static/{method}/{run}"
 #: Strict (stage C) evaluations of the reward-factor ablation (RISK-RL = risk_only,
 #: GREEN-RL = green_only), episodes from seed 5000.
@@ -204,8 +211,14 @@ def run_planner(ns, world, name: str, n: int, seed0: int, archive: Path) -> tupl
     return archived, rerun, {"rerun_csv": str(csv_path), "config": getattr(ns, cfg_name)}
 
 
-def run_real_planner(ns, name: str, n: int, seed0: int, archive: Path) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+def run_real_planner(ns, name: str, n: int, seed0: int, archive: Path,
+                     given_cities: set) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     city, archived_csv = REAL_PLANNERS[name]
+    # get_real_worlds() loads both cities; a city without --real-world gets a placeholder,
+    # so that a Vienna run needs no Warsaw world and vice versa.
+    for other, global_name in REAL_WORLD_GLOBALS.items():
+        if other != city and other not in given_cities:
+            setattr(ns, global_name, None)
     (vienna, vienna_src), (warsaw, warsaw_src) = ns.get_real_worlds()  # the archived run's code path
     world, source = (vienna, vienna_src) if city == "vienna" else (warsaw, warsaw_src)
     cfg = ns.M10RecedingHorizonPlannerConfig(**{**ns.REPORTED_M10_FULL_CONFIG, "planner_agl_m": 30.0})
@@ -217,7 +230,11 @@ def run_real_planner(ns, name: str, n: int, seed0: int, archive: Path) -> tuple[
         prefix=f"parity_{name}_n{n}_seed{seed0}_{int(time.time())}", save_paths=True,
     )
     archived = read_csv(archive / archived_csv)
-    return archived, rerun, {"rerun_csv": str(csv_path), "world_source": str(source), "world_aoi_id": world.aoi_id}
+    info = {"rerun_csv": str(csv_path), "world_source": str(source), "world_aoi_id": world.aoi_id}
+    if Path(str(source)).is_file():
+        info["world_sha256"] = sha256_file(Path(str(source)))
+        info["world_layers_sha256"] = UrbanWorldLayers.load_npz(source).layers_sha256()
+    return archived, rerun, info
 
 
 def run_ppo(ns, world, method: str, run: str, n: int, archive: Path, work: Path) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
@@ -282,7 +299,8 @@ def main() -> int:
     p.add_argument("--seed0", type=int, default=None,
                    help="first scenario seed for planners (default 5000; 7000 for real-GIS worlds)")
     p.add_argument("--real-world", action="append", default=[], metavar="CITY=NPZ",
-                   help="processed real-GIS world for VIENNA_/WARSAW_ methods, e.g. vienna=/data/vienna.npz")
+                   help="processed footway-only real-GIS world for VIENNA_/WARSAW_ methods, e.g. "
+                        "vienna=/data/vienna_prater_leopoldstadt_osm_1km_v1_footway_only_urban_world_layers.npz")
     p.add_argument("--atol", type=float, default=1e-9, help="absolute tolerance for numeric values")
     p.add_argument("--rtol", type=float, default=1e-5,
                    help="relative tolerance for non-integer numbers; absorbs float32 differences between "
@@ -312,12 +330,15 @@ def main() -> int:
             archived = read_csv(archive / PPO_ARCHIVE.format(method=method, run=run) / "episodes.csv")
         info = {"rerun_csv": str(args.rerun_csv)}
     else:
-        extra = {}
+        extra, given_cities = {}, set()
         for item in args.real_world:
             city, _, path = item.partition("=")
             if city not in REAL_WORLD_DRIVE_NAMES or not path:
                 p.error(f"--real-world expects vienna=PATH or warsaw=PATH, got {item!r}")
             extra[path] = REAL_WORLD_DRIVE_NAMES[city]
+            given_cities.add(city)
+        if args.method in REAL_PLANNERS and REAL_PLANNERS[args.method][0] not in given_cities:
+            p.error(f"{args.method} needs --real-world {REAL_PLANNERS[args.method][0]}=PATH")
         ns = load_legacy_namespace(archive, work, extra_inputs=extra)
         if args.env == "refactored":
             use_refactored_env(ns)
@@ -327,7 +348,7 @@ def main() -> int:
             archived, rerun, info = run_planner(ns, world, args.method, args.episodes, seed0, archive)
         elif args.method in REAL_PLANNERS:
             seed0 = 7000 if args.seed0 is None else args.seed0
-            archived, rerun, info = run_real_planner(ns, args.method, args.episodes, seed0, archive)
+            archived, rerun, info = run_real_planner(ns, args.method, args.episodes, seed0, archive, given_cities)
         elif args.method.startswith("PPO:"):
             _, method, seed = args.method.split(":", 2)
             run = "single_checkpoint" if seed == "single" else f"trainseed_{int(seed)}"

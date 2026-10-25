@@ -79,6 +79,21 @@ Warnings (legal but worth checking):
 - grids other than 1000 × 1000 at 1 m, on which the environment and planners are
   not yet validated.
 
+## Content checksum
+
+`UrbanWorldLayers.layers_sha256()` is a SHA-256 checksum of the resolution and all
+layers as loaded (float32, masks thresholded to 0/1). It does not depend on how the
+file was written or on the metadata (`aoi_id`, `crs`, `bbox`, `schema_version`,
+`meta_json`), none of which the environment reads, so two worlds with the same
+checksum give the same simulation. Recorded missions name the checksum of the world
+they were sampled in (`world_layers_sha256` in the JSON next to a scenario CSV); a
+world you rebuilt reproduces them only if its checksum is the same:
+
+```python
+from ruscuav_benchmark.world import UrbanWorldLayers
+UrbanWorldLayers.load_npz("my_city.npz").layers_sha256()
+```
+
 ## Bundled worlds
 
 See `worlds/synthetic/README.md`. Processed Vienna and Warsaw worlds are not

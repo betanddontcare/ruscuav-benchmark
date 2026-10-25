@@ -32,6 +32,17 @@
   environment, and `--method REWARD_FACTOR:…` the archived reward-factor
   evaluations; `scripts/migration/env_parity.py` and `env_parity_paths.py` compare
   the two environments step by step (docs/REPRODUCIBILITY.md).
+- `UrbanWorldLayers.layers_sha256()`: a checksum of a world's resolution and layers
+  that does not depend on the file layout or metadata (docs/WORLD_NPZ_SCHEMA.md).
+- Missions of the archived primary Vienna evaluations (footway-only world, seeds
+  7000–7199) recorded in
+  `scenarios/real_gis/vienna_prater_leopoldstadt_osm_1km_v1_footway_only_seed7000_n200.csv`
+  with the world's checksums; the world itself is still not distributed.
+  `scripts/materialize_legacy_scenarios.py --world` records missions of a processed
+  real-GIS world and also checks them in `ruscuav_benchmark.env`.
+- `scripts/legacy_parity.py` gives real-GIS worlds to the notebook code under the
+  footway-only names the archived runs used, needs only the world of the city being
+  re-run, and records the world's checksums in its report.
 
 ## 2.0.0 — 2026-07-24
 

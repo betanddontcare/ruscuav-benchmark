@@ -1,0 +1,50 @@
+{
+  "description": "Missions of the RUSCUAV v2.0.0 evaluations in the processed real-GIS world vienna_prater_leopoldstadt_osm_1km_v1_footway_only, recorded from the legacy env.reset(seed).",
+  "world_id": "vienna_prater_leopoldstadt_osm_1km_v1_footway_only",
+  "legacy_world_id": "vienna_prater_leopoldstadt_osm_1km_v1_footway_only",
+  "seeds": [
+    7000,
+    7199
+  ],
+  "world_file": {
+    "name": "vienna_prater_leopoldstadt_osm_1km_v1_footway_only_urban_world_layers.npz",
+    "bytes": 13061685,
+    "sha256": "d63f0622b3c924c06b2eb350477b602de6f321f838474ce091a142dfefbfc0a8"
+  },
+  "world_layers_sha256": "fa99c5710f9bcb2345901f986f0e97f59bddf26d775047c8c5f2e6079f692786",
+  "archived_world_file": {
+    "path": "worlds/vienna_prater_leopoldstadt_osm_1km_v1_footway_only_urban_world_layers.npz",
+    "bytes": 13061714,
+    "sha256": "7044b314c5bb513fa09de66597f75eb83854d982d652a3c49ac229336bea8f3b",
+    "listed_in": "reproducibility/v1_environment_and_audit/manifests/ASSET_INDEX.csv"
+  },
+  "environment": "make_ruscuav_env_m4_mode(stage='B', mode='strict_eval', risk_profile='balanced', n_obstacles=0)",
+  "variants_cross_checked": [
+    "make_static_eval_env('GEO-RL', primary_no_terminal)",
+    "make_static_eval_env('OBS-RL', primary_no_terminal)",
+    "make_static_eval_env('RISK+GREEN-RL', primary_no_terminal)",
+    "make_static_eval_env('RISK+OBS-RL', primary_no_terminal)",
+    "make_m12c_real_vienna_env_mode('reward_only', stage='B', mode='strict_eval')",
+    "make_m12c_real_vienna_env_mode('geometry_only', stage='B', mode='strict_eval')",
+    "make_m12c_real_vienna_env_mode('reward_only', stage='C', mode='strict_eval')",
+    "make_m12c_real_vienna_env_mode('geometry_only', stage='C', mode='strict_eval')",
+    "make_ruscuav_env_m4_mode(stage='C', mode='strict_eval')",
+    "ruscuav_benchmark.env.make_env('GEO-RL', regime='primary_no_terminal')",
+    "ruscuav_benchmark.env.make_env('OBS-RL', regime='primary_no_terminal')",
+    "ruscuav_benchmark.env.make_env('RISK-RL', regime='primary_no_terminal')",
+    "ruscuav_benchmark.env.make_env('GREEN-RL', regime='primary_no_terminal')",
+    "ruscuav_benchmark.env.make_env('RISK+GREEN-RL', regime='primary_no_terminal')",
+    "ruscuav_benchmark.env.make_env('RISK+OBS-RL', regime='primary_no_terminal')",
+    "ruscuav_benchmark.env.make_env('DYN-RISK-RL', regime='primary_no_terminal')",
+    "ruscuav_benchmark.env.make_env('DYN-OBS-RL', regime='primary_no_terminal')",
+    "ruscuav_benchmark.env.make_env('RISK+OBS-RL', regime='secondary_operational_stopping')"
+  ],
+  "archived_planned_paths_checked": 0,
+  "problems": [],
+  "notes": [
+    "The world is derived from OpenStreetMap data (\u00a9 OpenStreetMap contributors, ODbL 1.0) and is not distributed with RUSCUAV (THIRD_PARTY_NOTICES.md); worlds/real_gis/README.md describes how to rebuild it. The missions apply to a world whose layers_sha256 equals world_layers_sha256.",
+    "archived_world_file is the file of the same name listed in the archive's v1 asset index; its bytes differ from world_file. docs/REPRODUCIBILITY.md compares the two."
+  ],
+  "z_note": "start_z/target_z are absolute altitudes in metres, in the same height frame as the world's terrain_z.",
+  "created_at": "2026-10-25T15:37:41+00:00"
+}
