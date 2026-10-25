@@ -1,24 +1,29 @@
+# Environment for re-running the archived evaluations (scripts/legacy_parity.py).
+# These are the versions the archived checkpoints record in their system_info
+# (Python 3.12, NumPy 2.0.2, Stable-Baselines3 2.8.0, Gymnasium 1.2.3, PyTorch 2.11.0)
+# and the versions of the archived Colab environment for the rest. The parity check of
+# 2026-10-25 passed with exactly this set on Python 3.12 (see docs/REPRODUCIBILITY.md).
+
 # Core verification
-numpy>=2.0
-pandas>=2.2
-pyyaml>=6.0
+numpy==2.0.2
+pandas==2.2.2
+pyyaml==6.0.3
 
-# Model loading / strict re-evaluation; match the SB3 archives when possible.
-stable-baselines3==2.9.0
+# Model loading and re-evaluation
+stable-baselines3==2.8.0
 torch==2.11.0
-gym==0.25.2
-gymnasium==1.3.0
+gymnasium==1.2.3
 cloudpickle==3.1.2
+scipy==1.16.3
 
-# GIS / real-world pipeline
-geopandas
-shapely
-rasterio
-pyproj
-fiona
-rtree
-osmnx
-networkx
-matplotlib
-plotly
-scipy
+# GIS / real-world pipeline (also imported by the legacy notebook code)
+geopandas==1.1.3
+shapely==2.1.2
+rasterio==1.5.0
+pyproj==3.7.2
+affine==2.4.0
+pyogrio==0.13.0
+osmnx==2.1.1
+networkx==3.6.1
+matplotlib==3.10.0
+plotly==5.24.1

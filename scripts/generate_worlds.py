@@ -10,8 +10,11 @@ from ruscuav_benchmark.world import UrbanWorldLayers
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="Generate bundled RUSCUAV-v0 synthetic worlds.")
-    p.add_argument("--output-root", default="data/ruscuav_v0/worlds")
+    p = argparse.ArgumentParser(
+        description="Generate the AOI_SYNTH_001-003 synthetic worlds. The bundled copies are in "
+        "worlds/synthetic/AOI_SYNTH_001_003; the default output folder keeps them untouched."
+    )
+    p.add_argument("--output-root", default="runs/generated_worlds")
     p.add_argument("--seeds", nargs="*", type=int, default=[42, 123, 2026])
     args = p.parse_args()
     out_root = Path(args.output_root)

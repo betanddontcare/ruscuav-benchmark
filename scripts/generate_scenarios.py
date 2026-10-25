@@ -9,9 +9,12 @@ from ruscuav_benchmark.world import UrbanWorldLayers
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="Generate fixed RUSCUAV-v0 scenario CSV.")
-    p.add_argument("--world-root", default="data/ruscuav_v0/worlds")
-    p.add_argument("--output", default="data/ruscuav_v0/scenarios/static_eval_seeds.csv")
+    p = argparse.ArgumentParser(
+        description="Generate the fixed AOI_SYNTH_001-003 scenario CSV. The shipped file is "
+        "scenarios/legacy_v1/static_eval_seeds.csv; the default output keeps it untouched."
+    )
+    p.add_argument("--world-root", default="worlds/synthetic/AOI_SYNTH_001_003")
+    p.add_argument("--output", default="runs/scenarios/static_eval_seeds.csv")
     p.add_argument("--n-per-world", type=int, default=200)
     p.add_argument("--seed", type=int, default=20260701)
     args = p.parse_args()
