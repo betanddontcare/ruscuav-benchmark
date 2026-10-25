@@ -1,0 +1,16 @@
+{
+  "aoi_id": "AOI_SYNTH_000",
+  "name": "RUSCUAV canonical synthetic world AOI_SYNTH_000",
+  "crs": "LOCAL_METRIC_SYNTHETIC",
+  "bbox": [
+    0.0,
+    0.0,
+    1000.0,
+    1000.0
+  ],
+  "resolution_m": 1.0,
+  "world_npz_path": "urban_world_layers.npz",
+  "generator": "legacy build_m1_fake_gis_world (src/ruscuav_benchmark/legacy/definitions.py)",
+  "seed": 42,
+  "notes": "Canonical training and evaluation world of the RUSCUAV paper. Named AOI_FAKE_001 in RUSCUAV v2.0.0 and earlier; the alias still resolves."
+}

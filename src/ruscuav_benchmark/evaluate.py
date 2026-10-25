@@ -11,14 +11,16 @@ import numpy as np
 from .metrics import ExposureBudgets, evaluate_path, summarize_episode_records, write_episode_csv
 from .planners import RiskAStarConfig, RiskCostAStarPlanner
 from .risk import UrbanRiskModel
-from .world import UrbanWorldLayers
+from .world import UrbanWorldLayers, canonical_aoi_id
 
 
 def read_scenarios(path: str | Path, world_id: str | None = None) -> List[dict]:
+    """Read a scenario CSV, optionally keeping only one world (legacy world IDs match too)."""
     with Path(path).open("r", newline="", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
     if world_id is not None:
-        rows = [r for r in rows if r.get("world_id") == world_id]
+        wanted = canonical_aoi_id(world_id)
+        rows = [r for r in rows if canonical_aoi_id(r.get("world_id", "")) == wanted]
     return rows
 
 
