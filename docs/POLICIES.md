@@ -22,7 +22,10 @@ ckpt = archived_checkpoint("RISK+GREEN-RL/4001", archive="/data/RUSCUAV-v2.0.0")
 result = evaluate_policy(world, ckpt, "RISK+GREEN-RL", output_dir="runs/rg4001")
 print(result.summary["success_rate"], result.summary["mission_acceptability_rate"])
 
-# Your own Stable-Baselines3 checkpoint, on recorded missions, in the stopping regime
+# Your own Stable-Baselines3 checkpoint under the paper's protocol (docs/PROTOCOLS.md)
+result = evaluate_policy(world, "my_ppo.zip", "OBS-RL", protocol="canonical-primary")
+
+# ... or on recorded missions, in the stopping regime
 from ruscuav_benchmark.scenarios import missions_from_csv
 missions = missions_from_csv("scenarios/canonical/AOI_SYNTH_000_seed5000_n200.csv", world)
 result = evaluate_policy(world, "my_ppo.zip", "OBS-RL", missions=missions,
@@ -45,7 +48,12 @@ risk field. Each episode runs in a fresh environment. The policy acts
 deterministically unless `deterministic=False`; a Stable-Baselines3 model is then
 seeded with the episode seed, so that sampled runs repeat.
 
-Episodes and regimes work as for the planners (docs/PLANNERS.md). With `output_dir`
+Episodes and regimes work as for the planners (docs/PLANNERS.md); `protocol` sets
+the missions, the regime, the risk profile, the budgets (of the environment and of
+the post-hoc acceptability), the step length and limit and, for the `DYN-` presets,
+the dynamic risk (a dynamic protocol needs a `DYN-` preset and the `dynamic` row
+format); `env_overrides` may then change only the method's own settings
+(observation, reward, LiDAR, shields; docs/PROTOCOLS.md). With `output_dir`
 the evaluation writes `<prefix>_episodes.csv` (rewritten after every episode),
 `<prefix>_summary.json` and `<prefix>_config.json`, which records the policy (a
 checkpoint's path and SHA-256, or the policy's class), the row format and label, and
@@ -60,8 +68,8 @@ regime, the risk profile and the dynamic risk have their own arguments.
 From the command line:
 
 ```bash
-ruscuav evaluate --world worlds/synthetic/AOI_SYNTH_000/urban_world_layers.npz \
-    --checkpoint RISK+GREEN-RL/4001 --archive /data/RUSCUAV-v2.0.0 --output-dir runs/rg4001
+ruscuav evaluate --protocol canonical-primary --checkpoint RISK+GREEN-RL/4001 --archive /data/RUSCUAV-v2.0.0 \
+    --output-dir runs/rg4001
 ruscuav evaluate --world my_city.npz --policy my_ppo.zip --method OBS-RL --episodes 50 \
     --regime secondary_operational_stopping --output-dir runs/my_city
 ruscuav evaluate --evaluation dynamic/DYN-OBS-RL/1001 --archive /data/RUSCUAV-v2.0.0 \

@@ -402,6 +402,130 @@ successes, stuck and shield-stuck endings, episodes cut short and episodes of ze
 steps. With `RUSCUAV_EXACT_GOLDEN=1` it also compares digests of the observations,
 actions and paths, bit for bit.
 
+## The tables and statistics
+
+`ruscuav_benchmark.scoring` (docs/SCORING.md) replaces the notebook's
+post-processing, and `ruscuav_benchmark.protocols` and
+`ruscuav_benchmark.trajectories` (docs/PROTOCOLS.md, docs/TRAJECTORIES.md) let any
+method be evaluated and scored as the paper's methods were. They were compared with
+the archive as follows, with the software versions above.
+
+**The paper's tables.** `scripts/migration/score_parity.py` rebuilds the eight
+primary tables of the post-processing (the one-click runner's `stage_postprocess`,
+`stage_holm` and `_write_static_aggregate`) from the archived per-episode CSVs of the
+52 primary runs listed in `paper_table_primary_no_terminal_csv_registry.csv`
+(static, dynamic, Vienna and Warsaw) and compares the files line by line. All eight
+are identical, character for character:
+
+| Table (`paper_ready_v2/tables/`) | Rows |
+|---|---|
+| `paper_table_primary_no_terminal_all_run_summaries.csv` | 52 |
+| `paper_table_conditional_normalized_risk_metrics.csv` | 52 |
+| `paper_table_non_acceptability_cause_decomposition.csv` | 416 |
+| `paper_table_dynamic_budget_sensitivity.csv` | 96 |
+| `paper_table_primary_no_terminal_training_seed_ci_all_scopes.csv` | 24 |
+| `paper_table_primary_no_terminal_static_training_seed_ci.csv` | 33 |
+| `paper_table_holm_full_families.csv` | 15 |
+| `paper_table_holm_claim_driving_subset.csv` | 10 |
+
+Three details of the archive's arithmetic matter here. The post-processing read the
+CSVs back with `pandas.read_csv`, whose default float parser gives another last bit
+than exact parsing for about a fifth of the cells; read exactly, 16 of the 52 run
+summaries would differ in their last digits. `ruscuav_benchmark.tables.read_rows_csv`
+reads CSVs as pandas does, without pandas: on all 470 CSVs of the archive it gives
+the values and types of `pandas.read_csv` (pandas 2.2.2) for every one of 6.7 million
+cells, with the default and with the round-trip float parser. The static five-seed
+table, in contrast, summarized the evaluator's own summaries, computed before the
+rows were written; it is rebuilt from the exactly read rows (read as pandas reads
+them, one of its 33 rows would differ). And the paired tests used SciPy's
+`binomtest`: SciPy 1.16.3 and 1.18.1 give the 15 archived p-values bit for bit,
+whereas the exact binomial tail, rounded once, differs from 7 of them in the last
+bit, so the package uses SciPy too. With NumPy 2.5.4 and SciPy 1.18.1 instead of the
+versions above, six of the eight tables are again identical; in the two
+training-seed tables the bounds of the intervals differ in the last digits (by at
+most 5.4e-15, relatively), because SciPy 1.18 computes the Student-t quantile more
+accurately (with 4 degrees of freedom 2.7764451051977934 instead of
+2.7764451051977987).
+
+The episode bootstrap of the multi-seed tables (`stats.episode_bootstrap_ci`, the
+secondary uncertainty), recomputed for the 20 runs of
+`paper_table_multiseed_rl_episode_bootstrap_secondary.csv`, gives 245 of its 320 rows
+identically and the others to within 3.2e-16, relatively.
+
+```bash
+python scripts/migration/score_parity.py --archive /path/to/RUSCUAV-v2.0.0 --pandas
+```
+
+`tests/test_scoring.py` checks the tables against the notebook's own pandas code
+(`tests/notebook_reference.py`) on synthetic runs, and against the archived files
+when `RUSCUAV_ARCHIVE` points to the archive.
+
+**Protocols.** The protocol files carry the missions recorded in `scenarios/`
+(`tests/test_scoring.py` checks them against the CSVs and their checksums).
+`scripts/migration/trajectory_parity.py` flies the paper's planners and three
+archived policies under their protocols, all 200 missions, and compares the rows with
+the archived ones as `legacy_parity.py` does (integers, flags and text exactly, other
+numbers to a relative 1e-5; planning times are not compared):
+
+| Run | Protocol | Rows identical | Rows within tolerance |
+|---|---|---|---|
+| `STATIC_Astar` | `canonical-primary` | 189 | 200 |
+| `LOCAL_RH_Astar` | `canonical-primary` | 189 | 200 |
+| `FULL_RH_Astar` | `canonical-primary` | 183 | 200 |
+| `DYN_RH_Astar` | `canonical-dynamic` | 164 | 200 |
+| `FULL_RH_Astar` at 30 m | `vienna-primary` | 174 | 200 |
+| `GEO-RL/1001` | `canonical-primary` | 0 | 194 |
+| `DYN-OBS-RL/1001` | `canonical-dynamic` | 0 | 190 |
+| `VIENNA/RISK+GREEN-RL/extended_ft` | `vienna-primary` | 1 | 193 |
+
+These are the results of "The planners" and "The policies" above, row for row: a
+protocol run is the archived evaluation.
+
+**Trajectories.** The same script scores the flown paths of these runs, and of
+`FULL_RH_Astar` in `canonical-secondary`, with `ruscuav_benchmark.trajectories` and
+compares the rows with those of the flown episodes, every column the two have:
+
+| Run | Protocol | Episodes | Identical but for the cargo health | Ended for another reason | Largest cargo-health difference |
+|---|---|---|---|---|---|
+| `STATIC_Astar` | `canonical-primary` | 200 | 196 | 4 shield-stuck | 1.1e-6 |
+| `LOCAL_RH_Astar` | `canonical-primary` | 200 | 199 | 1 shield-stuck | 4.0e-7 |
+| `FULL_RH_Astar` | `canonical-primary` | 200 | 197 | 3 shield-stuck | 3.7e-7 |
+| `FULL_RH_Astar` | `canonical-secondary` | 200 | 197 | 3 shield-stuck | 3.7e-7 |
+| `DYN_RH_Astar` | `canonical-dynamic` | 200 | 200 | | 3.2e-7 |
+| `FULL_RH_Astar` at 30 m | `vienna-primary` | 200 | 195 | 5 without a path | 3.2e-7 |
+| `GEO-RL/1001` | `canonical-primary` | 200 | 172 | 28 shield-stuck | 2.7e-3 (7.4e-7 in the other episodes) |
+| `DYN-OBS-RL/1001` | `canonical-dynamic` | 200 | 176 | 24 shield-stuck | 9.1e-3 (4.7e-7 in the other episodes) |
+| `VIENNA/RISK+GREEN-RL/extended_ft` | `vienna-primary` | 200 | 185 | 15 shield-stuck | 1.4e-6 |
+
+In all 1,800 episodes every column the scorer computes is the environment's, bit for
+bit, apart from the cargo health. The 83 episodes that ended for a reason the
+positions do not show (78 shield-stuck endings and 5 planners without a path at the
+start) end as `ended`, with the same steps and exposure. The estimated cargo health
+stays within 1.4e-6 of the environment's except in two episodes that flew along the
+edge of the workspace (seed 5135 for 9 positions, seed 5158 for 5): there the
+environment clips the position at the edge but keeps the velocity pointing out of
+the workspace, so its cargo model sees accelerations that the positions do not have.
+No mission-acceptability verdict changed. All 1,800 episodes are within the
+vehicle's speed limits and workspace. The scorer counts 7 steps, in 6 episodes (two
+each of the three policies), as moving into a hazard between two positions: in each
+the environment's geometric shield had shortened the step, and the samples of the
+flown segment found a sliver of a sensitive zone below its overflight altitude that
+the shield's samples along the commanded segment had skipped
+(`scripts/migration/shield_steps.py` replays them; docs/TRAJECTORIES.md).
+
+```bash
+python scripts/migration/trajectory_parity.py --archive /path/to/RUSCUAV-v2.0.0 --work runs/trajectory_parity \
+    --vienna /path/to/vienna_prater_leopoldstadt_osm_1km_v1_footway_only_urban_world_layers.npz --policies
+```
+
+`tests/test_trajectories.py` repeats the comparison in the three canonical protocols
+with a simple policy, so it needs neither the archive nor PyTorch. The archive
+itself keeps the flown paths of two episodes only, of the Warsaw full planner
+(`primary_no_terminal_Warsaw_FULL_RH_Astar_seed7000/paths/`; the `planned_paths` of
+the M9 static planner are waypoint plans, not flights), so the paths are flown
+again here; the two Warsaw paths can be scored once the Warsaw world is available
+(below).
+
 ## Real-GIS worlds (Vienna, Warsaw)
 
 The processed Vienna and Warsaw worlds are derived from OpenStreetMap data and are

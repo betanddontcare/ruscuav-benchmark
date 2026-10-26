@@ -2,7 +2,10 @@
 
 Commands:
   validate   check world NPZ files against the ruscuav-world schema
-  evaluate   fly a planner of the paper or a policy on a world (same as ``ruscuav-evaluate``)
+  evaluate   fly a planner of the paper or a policy on a world, or score flown trajectories
+             (same as ``ruscuav-evaluate``)
+  score      the paper's tables and paired tests for per-episode results
+  protocol   list, show or create evaluation protocols
 """
 
 from __future__ import annotations
@@ -68,47 +71,96 @@ def _cmd_evaluate(args: argparse.Namespace) -> int:
     from .world import UrbanWorldLayers
 
     sources = [name for name, value in (("--policy", args.policy), ("--checkpoint", args.checkpoint),
-                                        ("--evaluation", args.evaluation)) if value is not None]
-    policy_mode = bool(sources)
+                                        ("--evaluation", args.evaluation), ("--trajectories", args.trajectories))
+               if value is not None]
+    policy_mode = bool(sources) and sources[0] != "--trajectories"
+    kind = "trajectories" if args.trajectories is not None else "policy" if policy_mode else "planner"
     try:
         if len(sources) > 1:
-            raise ValueError(f"give one of --policy, --checkpoint and --evaluation, not {' and '.join(sources)}")
-        if policy_mode and args.planner is not None:
+            raise ValueError(f"give one of --policy, --checkpoint, --evaluation and --trajectories, not "
+                             f"{' and '.join(sources)}")
+        if sources and args.planner is not None:
             raise ValueError(f"give --planner or {sources[0]}, not both")
-        if policy_mode and args.set:
-            raise ValueError("--set changes planner settings; it does not apply to policies")
-        if not policy_mode and (args.method or args.format or args.label or args.stochastic or args.archive):
+        if sources and args.set:
+            raise ValueError("--set changes planner settings; it does not apply to policies or trajectories")
+        if kind == "planner" and (args.method or args.format or args.label or args.stochastic or args.archive):
             raise ValueError("--method, --format, --label, --stochastic and --archive apply to "
                              "--policy, --checkpoint and --evaluation")
-        if args.evaluation is not None:
+        if args.protocol is not None:
+            given = [flag for flag, value in (("--scenarios", args.scenarios), ("--seed0", args.seed0),
+                                              ("--regime", args.regime), ("--profile", args.profile))
+                     if value is not None]
+            if given:
+                raise ValueError(f"{', '.join(given)}: the protocol fixes the missions, the regime and the risk "
+                                 "profile")
+        if kind == "trajectories":
+            name, result = _evaluate_trajectories(args)
+        elif args.evaluation is not None:
+            if args.protocol is not None:
+                raise ValueError("--protocol does not apply to --evaluation, which re-runs an archived evaluation "
+                                 "with its own settings")
             name, result = _evaluate_archived(args)
         else:
-            if args.world is None:
-                raise ValueError("--world is required")
-            if args.seed0 is None:
-                args.seed0 = 5000
-            world = UrbanWorldLayers.load_npz(args.world)
             missions = None
-            if args.scenarios is not None:
-                missions = missions_from_csv(args.scenarios, world, seed0=args.seed0)
-                if not missions:
-                    print(f"{args.scenarios} has no missions for world {world.aoi_id}", file=sys.stderr)
-                    return 2
+            if args.protocol is not None:
+                from .protocols import load_protocol, protocol_world
+
+                world = protocol_world(load_protocol(args.protocol), args.world)
+            else:
+                if args.world is None:
+                    raise ValueError("--world is required (or --protocol, with the protocol's world)")
+                if args.seed0 is None:
+                    args.seed0 = 5000
+                world = UrbanWorldLayers.load_npz(args.world)
+                if args.scenarios is not None:
+                    missions = missions_from_csv(args.scenarios, world, seed0=args.seed0)
+                    if not missions:
+                        print(f"{args.scenarios} has no missions for world {world.aoi_id}", file=sys.stderr)
+                        return 2
             if policy_mode:
                 name, result = _evaluate_policy(args, world, missions)
             else:
                 name, result = _evaluate_planner(args, world, missions)
-    except (ValueError, TypeError, OSError, ModuleNotFoundError) as exc:
+    except (ValueError, TypeError, OSError, KeyError, ModuleNotFoundError) as exc:
         print(f"ruscuav evaluate: {exc}", file=sys.stderr)
         return 2
     s = result.summary
     keys = ["n_episodes", "success_rate", "mission_acceptability_rate", "acceptable_given_success_rate",
-            "mean_steps", "termination_counts"]
+            "mean_steps", "termination_counts", "cargo_health_estimated", "episodes_outside_speed_limits",
+            "episodes_outside_workspace", "episodes_with_hazard_segments"]
     regime = s["regime"]["name"] if isinstance(s.get("regime"), dict) else s.get("regime")
-    print(json.dumps({("policy" if policy_mode else "planner"): name, "world_id": s["world_id"], "regime": regime,
-                      **{k: s[k] for k in keys if k in s},
+    out = {kind if kind != "trajectories" else "label": name, "world_id": s["world_id"], "regime": regime}
+    if isinstance(s.get("protocol"), dict):
+        out["protocol"] = s["protocol"]["name"]
+        out["protocol_complete"] = s["protocol"]["complete"]
+    print(json.dumps({**out, **{k: s[k] for k in keys if k in s},
                       "csv_path": None if result.csv_path is None else str(result.csv_path)}, indent=2))
+    if kind == "trajectories":
+        unflyable = {k: s[k] for k in ("episodes_outside_speed_limits", "episodes_outside_workspace",
+                                        "episodes_with_hazard_segments") if s.get(k)}
+        if unflyable:
+            counts = ", ".join(f"{k}: {v}" for k, v in unflyable.items())
+            print(f"note: some trajectories could not have been flown by the environment's vehicle ({counts}); "
+                  "their scores are not comparable with the environment's methods (docs/TRAJECTORIES.md)",
+                  file=sys.stderr)
     return 0
+
+
+def _evaluate_trajectories(args: argparse.Namespace):
+    from .trajectories import evaluate_trajectories
+
+    if args.protocol is None:
+        raise ValueError("--trajectories needs --protocol: trajectories are scored on a protocol's missions")
+    given = [flag for flag, value in (("--method", args.method), ("--format", args.format), ("--archive", args.archive))
+             if value is not None]
+    given += ["--stochastic"] if args.stochastic else []
+    given += ["--save-paths"] if args.save_paths else []
+    if given:
+        raise ValueError(f"{', '.join(given)}: not used when scoring trajectories")
+    label = args.label or "TRAJECTORY"
+    result = evaluate_trajectories(args.trajectories, args.protocol, args.world, label=label,
+                                   n_episodes=args.episodes, output_dir=args.output_dir, prefix=args.prefix)
+    return label, result
 
 
 def _progress(args: argparse.Namespace, name: str):
@@ -126,8 +178,9 @@ def _evaluate_planner(args: argparse.Namespace, world, missions):
     spec = get_planner(args.planner or "FULL_RH_Astar")
     spec = spec.with_config(**_config_changes(args.set, spec.kind))
     result = evaluate_planner(
-        world, spec, regime=args.regime, missions=missions, n_episodes=args.episodes, seed0=args.seed0,
-        risk_profile=args.profile, output_dir=args.output_dir, prefix=args.prefix, save_paths=args.save_paths,
+        world, spec, regime=args.regime if args.protocol is None else None, missions=missions,
+        n_episodes=args.episodes, seed0=5000 if args.seed0 is None else args.seed0, risk_profile=args.profile,
+        protocol=args.protocol, output_dir=args.output_dir, prefix=args.prefix, save_paths=args.save_paths,
         progress=_progress(args, spec.name),
     )
     return spec.name, result
@@ -156,9 +209,10 @@ def _evaluate_policy(args: argparse.Namespace, world, missions):
     if method not in METHOD_PRESETS:
         raise ValueError(f"unknown method {method!r}; available: {', '.join(METHOD_PRESETS)}")
     result = evaluate_policy(
-        world, policy, method, regime=args.regime, missions=missions, n_episodes=args.episodes, seed0=args.seed0,
-        row_format=args.format, label=args.label, deterministic=not args.stochastic, risk_profile=args.profile,
-        env_overrides=overrides, output_dir=args.output_dir, prefix=args.prefix, save_paths=args.save_paths,
+        world, policy, method, regime=args.regime if args.protocol is None else None, missions=missions,
+        n_episodes=args.episodes, seed0=5000 if args.seed0 is None else args.seed0, row_format=args.format,
+        label=args.label, deterministic=not args.stochastic, risk_profile=args.profile, env_overrides=overrides,
+        protocol=args.protocol, output_dir=args.output_dir, prefix=args.prefix, save_paths=args.save_paths,
         progress=_progress(args, name),
     )
     return name, result
@@ -176,8 +230,8 @@ def _evaluate_archived(args: argparse.Namespace):
     given = [flag for flag, value in (("--method", args.method), ("--format", args.format), ("--label", args.label),
                                       ("--scenarios", args.scenarios)) if value is not None]
     given += ["--stochastic"] if args.stochastic else []
-    given += ["--regime"] if args.regime != "primary_no_terminal" else []
-    given += ["--profile"] if args.profile != "balanced" else []
+    given += ["--regime"] if args.regime is not None else []
+    given += ["--profile"] if args.profile is not None else []
     if given:
         raise ValueError(f"{', '.join(given)}: the archived evaluation fixes these settings")
     world = None if args.world is None else UrbanWorldLayers.load_npz(args.world)
@@ -188,6 +242,234 @@ def _evaluate_archived(args: argparse.Namespace):
                                prefix=args.prefix, save_paths=args.save_paths,
                                progress=_progress(args, args.evaluation), **kwargs)
     return args.evaluation, result
+
+
+def _run_spec(spec: str):
+    """``[LABEL[@SEED]=]PATH`` -> (label or None, training seed or None, path)."""
+    from pathlib import Path
+
+    if "=" in spec and not Path(spec).exists():
+        left, path = spec.split("=", 1)
+        label, _, seed = left.partition("@")
+        try:
+            train_seed = float(seed) if seed else None
+        except ValueError:
+            raise ValueError(f"{spec!r}: the training seed after @ must be a number") from None
+        return (label or None), train_seed, path
+    return None, None, spec
+
+
+def _sha256(path) -> str:
+    import hashlib
+
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _recorded_settings(csv_path: Optional[str]) -> Optional[Dict[str, Any]]:
+    """The settings an evaluation of this package recorded next to its
+    ``<prefix>_episodes.csv`` (``<prefix>_config.json`` or ``<prefix>_summary.json``)."""
+    from pathlib import Path
+
+    if not csv_path or not str(csv_path).endswith("_episodes.csv"):
+        return None
+    path = Path(csv_path)
+    stem = path.name[: -len("_episodes.csv")]
+    for suffix in ("_config.json", "_summary.json"):
+        candidate = path.with_name(stem + suffix)
+        if candidate.is_file():
+            try:
+                data = json.loads(candidate.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if isinstance(data, dict):
+                return data
+    return None
+
+
+def _check_against_protocol(run, protocol) -> Dict[str, Any]:
+    """Refuse a run that was not evaluated under ``protocol``: dynamic risk where the
+    protocol has none (or none where it has), another regime in the rows, another
+    protocol, world or regime recorded next to the CSV, or seeds that are not the
+    protocol's missions. Returns the protocol check of the run for score.json."""
+    from .tables import is_missing
+    from .world import canonical_aoi_id
+
+    what = f"run {run.label!r}"
+    dynamic_rows = any("dynamic_cumulative_risk" in r for r in run.rows)
+    if protocol.dynamic and not dynamic_rows:
+        raise ValueError(f"{what} has no dynamic risk; protocol {protocol.name!r} scores dynamic acceptability")
+    if dynamic_rows and not protocol.dynamic:
+        raise ValueError(f"{what} has dynamic risk; protocol {protocol.name!r} has none (score it under a dynamic "
+                         "protocol such as canonical-dynamic)")
+    regimes = sorted({str(r["evaluation_regime"]) for r in run.rows if not is_missing(r.get("evaluation_regime"))})
+    if regimes and regimes != [protocol.regime]:
+        raise ValueError(f"{what} was evaluated in the regime {', '.join(regimes)}; protocol {protocol.name!r} has "
+                         f"{protocol.regime}")
+    recorded = _recorded_settings(run.path)
+    recorded_protocol = None
+    if recorded is not None:
+        record = recorded.get("protocol")
+        if isinstance(record, dict) and record.get("digest"):
+            recorded_protocol = record.get("name")
+            if record["digest"] != protocol.digest():
+                raise ValueError(f"{what} was flown under the protocol {record.get('name')!r} (digest "
+                                 f"{str(record['digest'])[:12]}...), not under {protocol.name!r} (digest "
+                                 f"{protocol.digest()[:12]}...)")
+        else:
+            world_id = recorded.get("world_id")
+            if world_id is not None and canonical_aoi_id(str(world_id)) != protocol.world_id:
+                raise ValueError(f"{what} was flown in the world {world_id}; protocol {protocol.name!r} is defined for "
+                                 f"{protocol.world_id}")
+            regime = recorded.get("regime")
+            regime = regime.get("name") if isinstance(regime, dict) else regime
+            if regime is not None and regime != protocol.regime:
+                raise ValueError(f"{what} was flown in the regime {regime}; protocol {protocol.name!r} has "
+                                 f"{protocol.regime}")
+    check = protocol.check_seeds([r.get("seed") for r in run.rows], what=what)
+    return {"label": run.label, "train_seed": run.train_seed, "complete": check["complete"],
+            "missing_missions": len(check["missing"]), "recorded_protocol": recorded_protocol}
+
+
+def _cmd_score(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from .posthoc import DT_S
+    from .scoring import PAIRED_METRICS, load_run, read_comparisons, read_registry, score_runs
+    from .tables import is_missing, jsonable
+
+    try:
+        protocol = None
+        if args.protocol is not None:
+            from .protocols import load_protocol
+
+            protocol = load_protocol(args.protocol)
+        runs = read_registry(args.registry, exact_floats=args.exact_floats) if args.registry else []
+        for spec in args.runs:
+            label, seed, path = _run_spec(spec)
+            run = load_run(path, label, train_seed=seed, exact_floats=args.exact_floats,
+                           scope=args.scope if args.scope is not None else (protocol.name if protocol else ""))
+            regimes = {str(r["evaluation_regime"]) for r in run.rows if not is_missing(r.get("evaluation_regime"))}
+            run.regime = regimes.pop() if len(regimes) == 1 else (protocol.regime if protocol and not regimes else "")
+            runs.append(run)
+        if not runs:
+            raise ValueError("give per-episode CSVs or --registry")
+        checks = []
+        if protocol is not None:
+            for run in runs:
+                checks.append(_check_against_protocol(run, protocol))
+                # checked: the rows' regime, where they record one, is the protocol's
+                run.dynamic, run.regime = protocol.dynamic, protocol.regime
+        comparisons = []
+        for item in args.compare:
+            if Path(item).is_file():
+                comparisons += read_comparisons(item)
+                continue
+            parts = item.split(":")
+            if len(parts) != 3 or parts[2] not in PAIRED_METRICS:
+                raise ValueError(f"--compare {item!r}: expected a CSV file or A:B:METRIC with METRIC one of "
+                                 f"{', '.join(PAIRED_METRICS)}")
+            a, b, metric = parts
+            comparisons.append({"family": "comparisons", "comparison_id": f"{a}_vs_{b}_{metric}", "method_a": a,
+                                "method_b": b, "metric": metric, "claim_driving": False})
+        tables = score_runs(runs, comparisons or None, budgets=None if protocol is None else protocol.budgets,
+                            dt_s=DT_S if protocol is None else protocol.dt_s)
+        written = tables.write(args.output_dir)
+        report = {
+            "protocol": None if protocol is None else {"name": protocol.name, "digest": protocol.digest(),
+                                                       "acceptability": protocol.acceptability},
+            "runs": [{"label": r.label, "train_seed": r.train_seed, "csv_path": r.source, "read_from": r.path,
+                      "episodes": len(r.rows), "dynamic": r.dynamic,
+                      "sha256": _sha256(r.path) if r.path and Path(r.path).is_file() else None} for r in runs],
+            "protocol_checks": checks,
+            "tables": {name: str(path) for name, path in written.items()},
+            "summaries": tables.summaries,
+            "paired_tests": tables.paired_tests,
+        }
+        out = Path(args.output_dir) / "score.json"
+        out.write_text(json.dumps(jsonable(report), indent=2) + "\n", encoding="utf-8")
+    except (ValueError, TypeError, KeyError, OSError, ModuleNotFoundError) as exc:
+        print(f"ruscuav score: {exc}", file=sys.stderr)
+        return 2
+
+    def pct(value):
+        return "   -  " if value is None or value != value else f"{100 * value:5.1f}%"
+
+    print(f"{'run':40s} {'episodes':>8s} {'success':>8s} {'MAR':>8s} {'AGS':>8s}")
+    for row in tables.summaries:
+        seed = "" if row["train_seed"] is None else f"@{row['train_seed']:g}"
+        print(f"{(row['label'] + seed)[:40]:40s} {row['n_episodes']:8d} {pct(row['success_rate']):>8s} "
+              f"{pct(row['mission_acceptability_rate']):>8s} {pct(row['acceptable_given_success_rate']):>8s}")
+    for row in tables.paired_tests:
+        print(f"{row['comparison_id']}: {row['n_ab']} vs {row['n_ba']} discordant missions, p = {row['p_raw']:.3g}, "
+              f"Holm p = {row['p_holm']:.3g}{' (significant)' if row['significant_holm_005'] else ''}")
+    incomplete = [c for c in checks if not c["complete"]]
+    if incomplete:
+        print(f"note: {len(incomplete)} runs do not cover all missions of {protocol.name}", file=sys.stderr)
+    print(f"tables and score.json written to {args.output_dir}")
+    return 0
+
+
+def _cmd_protocol_list(args: argparse.Namespace) -> int:
+    from .protocols import find_world, list_protocols, load_protocol
+
+    for name in list_protocols():
+        p = load_protocol(name)
+        world = "world found" if find_world(p) else ("world not found" if p.world_distributed else
+                                                     "world not distributed")
+        print(f"{name:22s} {p.n_episodes:4d} missions  {p.world_id}  {p.regime}  {p.acceptability} acceptability  "
+              f"({world})")
+    return 0
+
+
+def _cmd_protocol_show(args: argparse.Namespace) -> int:
+    from .protocols import find_world, load_protocol
+
+    try:
+        p = load_protocol(args.protocol)
+    except (ValueError, KeyError, OSError) as exc:
+        print(f"ruscuav protocol: {exc}", file=sys.stderr)
+        return 2
+    data = p.to_dict()
+    missions = data.pop("missions")
+    data["n_missions"] = len(missions)
+    data["seeds"] = [missions[0]["seed"], missions[-1]["seed"]]
+    data["digest"] = p.digest()
+    found = find_world(p)
+    data["world"]["found"] = None if found is None else str(found)
+    if args.missions:
+        data["missions"] = missions
+    print(json.dumps(data, indent=2))
+    return 0
+
+
+def _cmd_protocol_create(args: argparse.Namespace) -> int:
+    import os
+    from pathlib import Path
+
+    from .protocols import make_protocol
+
+    try:
+        # the world file is recorded relative to the protocol file's folder, where find_world looks first
+        try:
+            world_file = Path(os.path.relpath(Path(args.world).resolve(), Path(args.output).resolve().parent)).as_posix()
+        except ValueError:  # another drive (Windows)
+            world_file = Path(args.world).resolve().as_posix()
+        p = make_protocol(args.world, args.name, n_episodes=args.episodes, seed0=args.seed0, regime=args.regime,
+                          dynamic=args.dynamic, risk_profile=args.profile, description=args.description,
+                          world_file=world_file)
+        path = p.save(args.output)
+    except (ValueError, KeyError, OSError, RuntimeError, ModuleNotFoundError) as exc:
+        print(f"ruscuav protocol create: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps({"protocol": p.name, "file": str(path), "world_id": p.world_id, "world_file": p.world_file,
+                      "world_layers_sha256": p.world_layers_sha256, "missions": p.n_episodes,
+                      "seeds": [p.seeds[0], p.seeds[-1]], "regime": p.regime, "acceptability": p.acceptability,
+                      "digest": p.digest()}, indent=2))
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -203,14 +485,24 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=_cmd_validate)
 
     p = sub.add_parser(
-        "evaluate", help="fly a planner of the paper or a policy on a world (needs the 'env' extra)",
+        "evaluate", help="fly a planner of the paper or a policy on a world, or score flown trajectories (needs the "
+                         "'env' extra)",
         description="Fly a planner of the paper, or a PPO policy, on a world, one episode per mission, and write "
-                    "the per-episode CSV and the summary. Missions come from --scenarios or are sampled by the "
-                    "environment from seeds --seed0, --seed0+1, ... Policies need the 'rl' extra.",
+                    "the per-episode CSV and the summary. Missions come from --protocol, from --scenarios, or are "
+                    "sampled by the environment from seeds --seed0, --seed0+1, ... Policies need the 'rl' extra. "
+                    "With --trajectories, positions flown by any other method are scored on a protocol's missions "
+                    "(docs/TRAJECTORIES.md).",
     )
     p.add_argument("--world", default=None,
-                   help="world NPZ file (for --evaluation: only for the Vienna evaluations, whose world is not in the "
-                        "archive)")
+                   help="world NPZ file (with --protocol: needed when the protocol's world is not distributed; for "
+                        "--evaluation: only for the Vienna evaluations, whose world is not in the archive)")
+    p.add_argument("--protocol", default=None,
+                   help="evaluation protocol, a name (canonical-primary, canonical-secondary, canonical-dynamic, "
+                        "vienna-primary; see `ruscuav protocol list`) or a protocol file: its world, missions, "
+                        "regime, risk profile and dynamic risk (docs/PROTOCOLS.md)")
+    p.add_argument("--trajectories", default=None,
+                   help="score flown trajectories instead of flying a method: a folder of .npy files, an .npz or a "
+                        "CSV (docs/TRAJECTORIES.md); needs --protocol")
     p.add_argument("--planner", default=None, choices=list(PLANNER_PRESETS),
                    help="planner (default FULL_RH_Astar unless a policy is given)")
     p.add_argument("--policy", default=None, help="Stable-Baselines3 PPO checkpoint (.zip) to fly; needs --method")
@@ -225,20 +517,21 @@ def build_parser() -> argparse.ArgumentParser:
                         "the preset it was trained in)")
     p.add_argument("--format", default=None, choices=["posthoc", "dynamic", "transfer"],
                    help="row format of a policy evaluation (default posthoc; dynamic for DYN-* presets)")
-    p.add_argument("--label", default=None, help="method label written in the rows of a policy evaluation")
+    p.add_argument("--label", default=None,
+                   help="method label written in the rows of a policy evaluation or of scored trajectories")
     p.add_argument("--stochastic", action="store_true", help="sample the policy's actions (default deterministic)")
     p.add_argument("--scenarios", default=None,
                    help="scenario CSV with start/target columns and, optionally, seed and world_id (rows of "
                         "this world are flown; rows sharing a seed share the dynamic risk field)")
     p.add_argument("--episodes", type=int, default=None,
-                   help="number of episodes (default: every scenario row, or 200 seeds)")
+                   help="number of episodes (default: every mission of the protocol or scenario file, or 200 seeds)")
     p.add_argument("--seed0", type=int, default=None,
                    help="first seed when no scenario file is given, or for rows without a seed (default 5000; for "
                         "--evaluation that of the archived run)")
-    p.add_argument("--regime", default="primary_no_terminal",
+    p.add_argument("--regime", default=None,
                    choices=["primary_no_terminal", "secondary_operational_stopping"],
                    help="evaluation regime (default primary_no_terminal)")
-    p.add_argument("--profile", default="balanced", help="risk profile (default balanced)")
+    p.add_argument("--profile", default=None, help="risk profile (default balanced)")
     p.add_argument("--set", action="append", default=[], metavar="FIELD=VALUE",
                    help="change a planner setting, e.g. --set planner_agl_m=30 (repeatable; see docs/PLANNERS.md)")
     p.add_argument("--output-dir", required=True, help="directory for <prefix>_episodes.csv, _summary.json, ...")
@@ -248,6 +541,54 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--save-paths", action="store_true", help="also save the flown (and planned) paths")
     p.add_argument("--quiet", action="store_true", help="no progress messages")
     p.set_defaults(func=_cmd_evaluate)
+
+    p = sub.add_parser(
+        "score", help="the paper's tables and paired tests for per-episode results",
+        description="Summaries (success, post-hoc mission acceptability, conditional and normalized risk), "
+                    "training-seed intervals, causes of non-acceptability, the dynamic-budget sweep and, with "
+                    "--compare, exact paired tests with Holm's correction, for per-episode CSVs (docs/SCORING.md).",
+    )
+    p.add_argument("runs", nargs="*", metavar="[LABEL[@SEED]=]CSV",
+                   help="per-episode CSV of one run; LABEL defaults to the rows' method, SEED is the training seed "
+                        "of a learned method")
+    p.add_argument("--registry", default=None,
+                   help="CSV listing runs (columns label, csv_path and optionally dynamic, train_seed, scope, regime)")
+    p.add_argument("--protocol", default=None,
+                   help="check that every run was evaluated under the protocol (its missions, regime and dynamic "
+                        "risk, and the protocol, world or regime recorded next to the CSV) and score with its "
+                        "budgets and acceptability")
+    p.add_argument("--compare", action="append", default=[], metavar="CSV|A:B:METRIC",
+                   help="paired comparisons: a CSV with family, comparison_id, method_a, method_b, metric "
+                        "(success, MAR_static, DynOK, MAR_dynamic), or A:B:METRIC (repeatable; one family)")
+    p.add_argument("--scope", default=None, help="scope of the runs given on the command line (default: the protocol)")
+    p.add_argument("--exact-floats", action="store_true",
+                   help="read numbers correctly rounded (default: as pandas.read_csv reads them, as the archive did)")
+    p.add_argument("--output-dir", required=True, help="directory for the tables and score.json")
+    p.set_defaults(func=_cmd_score)
+
+    p = sub.add_parser("protocol", help="list, show or create evaluation protocols",
+                       description="Evaluation protocols fix the world, the missions, the regime, the dynamic risk "
+                                   "and the budgets that results are compared under (docs/PROTOCOLS.md).")
+    actions = p.add_subparsers(dest="action", required=True)
+    q = actions.add_parser("list", help="the protocols of the package")
+    q.set_defaults(func=_cmd_protocol_list)
+    q = actions.add_parser("show", help="a protocol's settings")
+    q.add_argument("protocol", help="protocol name or file")
+    q.add_argument("--missions", action="store_true", help="also print the missions")
+    q.set_defaults(func=_cmd_protocol_show)
+    q = actions.add_parser("create", help="record a protocol for a world (needs the 'env' extra)")
+    q.add_argument("--world", required=True, help="world NPZ file")
+    q.add_argument("--name", required=True, help="protocol name")
+    q.add_argument("--output", required=True, help="protocol file to write (.json)")
+    q.add_argument("--episodes", type=int, default=200, help="number of missions (default 200)")
+    q.add_argument("--seed0", type=int, default=5000, help="seed of the first mission (default 5000)")
+    q.add_argument("--regime", default="primary_no_terminal",
+                   choices=["primary_no_terminal", "secondary_operational_stopping"])
+    q.add_argument("--dynamic", action="store_true",
+                   help="with the paper's dynamic risk field and dynamic acceptability")
+    q.add_argument("--profile", default="balanced", help="risk profile (default balanced)")
+    q.add_argument("--description", default="", help="description written into the protocol")
+    q.set_defaults(func=_cmd_protocol_create)
     return parser
 
 

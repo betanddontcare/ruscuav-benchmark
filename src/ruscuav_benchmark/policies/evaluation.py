@@ -13,11 +13,11 @@ import json
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Union
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Union
 
 import numpy as np
 
-from ..posthoc import DT_S, summarize_posthoc, with_derived_metrics
+from ..posthoc import DEFAULT_BUDGETS, DT_S, summarize_posthoc, with_derived_metrics
 from ..scenarios import Episode, episode_list
 from ..tables import Row, is_true, jsonable, mean_of, median_of, std_of, termination_counts, write_rows_csv
 from ..world import UrbanWorldLayers, canonical_aoi_id
@@ -138,12 +138,14 @@ def _summary_transfer(rows: List[Row]) -> Dict[str, Any]:
     return s
 
 
-def summarize_policy_rows(rows: List[Row], row_format: str, dt_s: float = DT_S) -> Dict[str, Any]:
+def summarize_policy_rows(rows: List[Row], row_format: str, dt_s: float = DT_S,
+                          budgets: Mapping[str, float] = DEFAULT_BUDGETS) -> Dict[str, Any]:
     """Summary of a policy evaluation with the statistics of the archived summaries
     of the row format (the posthoc format: rates and means over all, successful and
-    acceptable episodes; ``dt_s`` is the step length of its derived rates)."""
+    acceptable episodes, with acceptability from ``budgets``; ``dt_s`` is the step
+    length of its derived rates)."""
     if row_format == "posthoc":
-        return summarize_posthoc(rows, dynamic=False, dt_s=dt_s)
+        return summarize_posthoc(rows, dynamic=False, budgets=budgets, dt_s=dt_s)
     if row_format == "dynamic":
         return _summary_dynamic(rows)
     if row_format == "transfer":
@@ -151,9 +153,10 @@ def summarize_policy_rows(rows: List[Row], row_format: str, dt_s: float = DT_S) 
     raise ValueError(f"row_format={row_format!r}; expected one of {list(ROW_FORMATS)}")
 
 
-def _episode_rows(rows: List[Row], row_format: str, dt_s: float = DT_S) -> List[Row]:
+def _episode_rows(rows: List[Row], row_format: str, dt_s: float = DT_S,
+                  budgets: Mapping[str, float] = DEFAULT_BUDGETS) -> List[Row]:
     """The rows as the archived evaluations wrote them (posthoc: with the derived metrics)."""
-    return with_derived_metrics(rows, dt_s=dt_s) if row_format == "posthoc" else rows
+    return with_derived_metrics(rows, dt_s=dt_s, budgets=budgets) if row_format == "posthoc" else rows
 
 
 # ---------------------------------------------------------------------- evaluation
@@ -218,9 +221,10 @@ def evaluate_policy(
     label: Optional[str] = None,
     deterministic: bool = True,
     max_steps: int = 1000,
-    risk_profile: str = "balanced",
+    risk_profile: Optional[str] = None,
     dynamic_risk: Any = None,
     env_overrides: Optional[Dict[str, Any]] = None,
+    protocol: Any = None,
     output_dir: Union[str, Path, None] = None,
     prefix: Optional[str] = None,
     save_paths: bool = False,
@@ -237,6 +241,15 @@ def evaluate_policy(
     ``"primary_no_terminal"`` (default) or ``"secondary_operational_stopping"``, or
     give ``stage`` and ``mode``. ``env_overrides`` change ``EnvConfig`` fields (for
     example ``lidar``); ``dynamic_risk`` replaces the dynamic risk configuration.
+
+    ``protocol`` (a name or file, see :mod:`ruscuav_benchmark.protocols`) sets the
+    missions (all, or the first ``n_episodes``), the regime, the risk profile, the
+    acceptability budgets (the environment's and the post-hoc ones), the step length
+    and limit and, for the ``DYN-`` presets, the dynamic risk; these must then not be
+    given, and ``env_overrides`` may only change the method's own settings
+    (:data:`~ruscuav_benchmark.protocols.METHOD_FIELDS`: observation, reward, LiDAR,
+    shields). The world must be the protocol's; a dynamic protocol needs a ``DYN-``
+    preset and the ``"dynamic"`` row format.
 
     ``row_format`` is ``"posthoc"`` (default; ``"dynamic"`` for the dynamic presets,
     and only for them) or ``"transfer"`` (see :mod:`ruscuav_benchmark.policies.rollout`);
@@ -257,8 +270,37 @@ def evaluate_policy(
     if row_format not in ROW_FORMATS:
         raise ValueError(f"row_format={row_format!r}; expected one of {list(ROW_FORMATS)}")
     label = default_label(method, row_format) if label is None else str(label)
+    protocol_record = chosen_protocol = None
+    budgets: Mapping[str, float] = DEFAULT_BUDGETS
+    if protocol is not None:
+        from ..env import METHOD_PRESETS
+        from ..protocols import load_protocol
+
+        chosen_protocol = load_protocol(protocol)
+        if int(max_steps) != int(chosen_protocol.max_steps):
+            raise ValueError(f"max_steps={max_steps}: protocol {chosen_protocol.name!r} has "
+                             f"{chosen_protocol.max_steps}")
+        if chosen_protocol.dynamic and row_format != "dynamic":
+            raise ValueError(f"protocol {chosen_protocol.name!r} scores dynamic acceptability; the {row_format!r} "
+                             "row format has no dynamic risk: use row_format='dynamic'")
+        dynamic_method = METHOD_PRESETS.get(method, {}).get("dynamic_risk") is not None
+        fixed = {"regime": regime, "stage": stage, "mode": mode, "seeds": seeds, "missions": missions,
+                 "risk_profile": risk_profile, "dynamic_risk": dynamic_risk}
+        chosen, protocol_record = chosen_protocol.apply(world, dynamic_method=dynamic_method, n_episodes=n_episodes,
+                                                        given=fixed)
+        missions, regime, risk_profile = chosen["missions"], chosen["regime"], chosen["risk_profile"]
+        dynamic_risk, n_episodes = chosen.get("dynamic_risk"), None
+        budgets = chosen_protocol.budgets
+    risk_profile = "balanced" if risk_profile is None else risk_profile
     episodes = episode_list(seeds, missions, n_episodes, seed0)
-    config, regime_obj = _env_config(method, regime, stage, mode, risk_profile, dynamic_risk, env_overrides)
+    if chosen_protocol is not None:
+        from .. import env as env_package
+
+        config = chosen_protocol.environment_config(method, dynamic_risk=dynamic_method, **(env_overrides or {}))
+        chosen_protocol.check_environment(config)
+        regime_obj = env_package.REGIMES[chosen_protocol.regime]
+    else:
+        config, regime_obj = _env_config(method, regime, stage, mode, risk_profile, dynamic_risk, env_overrides)
     if row_format == "dynamic" and config.dynamic_risk is None:
         raise ValueError(f"the dynamic format records dynamic risk; {method} has none (use a DYN- preset or give "
                          "dynamic_risk)")
@@ -286,8 +328,13 @@ def evaluate_policy(
         "policy": policy_info,
         "environment": jsonable(config.to_dict()),
     }
+    if protocol_record is not None:
+        settings["protocol"] = protocol_record
     if prefix is None:
-        prefix = f"{method}_{world_id}_{regime_obj.name}_{_settings_digest(settings)}"
+        if protocol_record is not None:
+            prefix = f"{method}_{protocol_record['name']}_{_settings_digest(settings)}"
+        else:
+            prefix = f"{method}_{world_id}_{regime_obj.name}_{_settings_digest(settings)}"
     out_dir = None if output_dir is None else Path(output_dir)
     csv_path = summary_path = paths_dir = None
     if out_dir is not None:
@@ -309,7 +356,8 @@ def evaluate_policy(
             reseed(int(seed))
         try:
             row, path = run_policy_episode(env, policy, seed, row_format=row_format, label=label, regime=regime_obj,
-                                           options=options, deterministic=deterministic, max_steps=max_steps)
+                                           options=options, deterministic=deterministic, max_steps=max_steps,
+                                           budgets=budgets)
         finally:
             env.close()
         row["episode"] = index
@@ -318,11 +366,11 @@ def evaluate_policy(
         if paths_dir is not None:
             np.save(paths_dir / f"episode_{index:05d}_seed_{seed}_path.npy", path)
         if csv_path is not None:
-            write_rows_csv(csv_path, _episode_rows(rows, row_format, dt_s))
+            write_rows_csv(csv_path, _episode_rows(rows, row_format, dt_s, budgets))
         if progress is not None:
             progress(index, len(episodes), row)
 
-    summary = summarize_policy_rows(rows, row_format, dt_s)
+    summary = summarize_policy_rows(rows, row_format, dt_s, budgets)
     summary.update({
         **settings,
         "legacy_world_id": world.aoi_id,
@@ -333,7 +381,7 @@ def evaluate_policy(
     if summary_path is not None:
         summary["csv_path"] = str(csv_path)
         summary_path.write_text(json.dumps(jsonable(summary), indent=2) + "\n", encoding="utf-8")
-    return PolicyEvaluation(method, row_format, _episode_rows(rows, row_format, dt_s), summary, csv_path,
+    return PolicyEvaluation(method, row_format, _episode_rows(rows, row_format, dt_s, budgets), summary, csv_path,
                             summary_path, paths)
 
 
@@ -356,7 +404,7 @@ def evaluate_archived(name: str, archive: Union[str, Path], world: Optional[Urba
         raise KeyError(f"unknown archived evaluation {name!r}; available: {sorted(ARCHIVED_EVALUATIONS)}")
     entry = ARCHIVED_EVALUATIONS[name]
     fixed = sorted(set(kwargs) & {"regime", "stage", "mode", "row_format", "label", "risk_profile", "dynamic_risk",
-                                  "env_overrides", "deterministic", "max_steps", "seeds", "missions"})
+                                  "env_overrides", "deterministic", "max_steps", "seeds", "missions", "protocol"})
     if fixed:
         raise ValueError(f"{fixed} are fixed by the archived evaluation; use evaluate_policy to change them")
     if world is None:

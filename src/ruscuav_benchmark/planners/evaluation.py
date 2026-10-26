@@ -84,8 +84,9 @@ def evaluate_planner(
     missions: Optional[Sequence[Episode]] = None,
     n_episodes: Optional[int] = None,
     seed0: int = 5000,
-    risk_profile: str = "balanced",
+    risk_profile: Optional[str] = None,
     dynamic_risk: Any = None,
+    protocol: Any = None,
     output_dir: Union[str, Path, None] = None,
     prefix: Optional[str] = None,
     save_paths: bool = False,
@@ -103,8 +104,14 @@ def evaluate_planner(
     fields, e.g. ``planner_agl_m=30.0``. ``dynamic_risk`` replaces the dynamic risk
     configuration of the dynamic planner's environment.
 
-    The environment and the planner use the risk profile ``risk_profile``; the
-    archived runs used ``"balanced"`` throughout.
+    ``protocol`` (a name or file, see :mod:`ruscuav_benchmark.protocols`) sets the
+    missions (all, or the first ``n_episodes``), the regime, the risk profile, the
+    acceptability budgets, the step length and the dynamic risk, which must then not
+    be given; the planner's ``max_steps`` must be the protocol's step limit, and the
+    world must be the protocol's.
+
+    The environment and the planner use the risk profile ``risk_profile``
+    (``"balanced"`` by default; the archived runs used it throughout).
 
     With ``output_dir``, ``<prefix>_episodes.csv`` (rewritten after every episode),
     ``<prefix>_summary.json`` and ``<prefix>_config.json`` are written there. The
@@ -117,8 +124,30 @@ def evaluate_planner(
     spec = get_planner(planner) if isinstance(planner, str) else planner
     if config_changes:
         spec = spec.with_config(**config_changes)
+    protocol_record = chosen_protocol = None
+    if protocol is not None:
+        from ..protocols import load_protocol
+
+        chosen_protocol = load_protocol(protocol)
+        if int(spec.config.max_steps) != int(chosen_protocol.max_steps):
+            raise ValueError(f"max_steps={spec.config.max_steps}: protocol {chosen_protocol.name!r} has a step limit "
+                             f"of {chosen_protocol.max_steps}")
+        fixed = {"regime": regime, "stage": stage, "mode": mode, "seeds": seeds, "missions": missions,
+                 "risk_profile": risk_profile, "dynamic_risk": dynamic_risk}
+        chosen, protocol_record = chosen_protocol.apply(world, dynamic_method=spec.kind == "dynamic",
+                                                        n_episodes=n_episodes, given=fixed)
+        missions, regime, risk_profile = chosen["missions"], chosen["regime"], chosen["risk_profile"]
+        dynamic_risk, n_episodes = chosen.get("dynamic_risk"), None
+    risk_profile = "balanced" if risk_profile is None else risk_profile
     episodes = episode_list(seeds, missions, n_episodes, seed0)
-    new_env, env_config = _env_factory(spec, world, regime, stage, mode, risk_profile, dynamic_risk)
+    if chosen_protocol is not None:
+        from .. import env as env_package
+
+        env_config = chosen_protocol.environment_config(spec.env_method, dynamic_risk=spec.kind == "dynamic")
+        chosen_protocol.check_environment(env_config)
+        new_env = (lambda: env_package.RuscuavEnv(world, env_config))
+    else:
+        new_env, env_config = _env_factory(spec, world, regime, stage, mode, risk_profile, dynamic_risk)
     grid = RiskCostGrid(world, spec.config, risk_profile)
     planner_obj = make_planner(spec, world, risk_profile, grid)
 
@@ -136,11 +165,19 @@ def evaluate_planner(
             "dynamic_risk": None if env_config.dynamic_risk is None else asdict(env_config.dynamic_risk),
         },
     }
+    if protocol_record is not None:
+        settings["protocol"] = protocol_record
     if prefix is None:
-        prefix = f"{spec.name}_{world_id}_{regime_label}"
         preset = PLANNER_PRESETS.get(spec.name)
-        custom = preset is None or preset.to_dict() != spec.to_dict() or dynamic_risk is not None \
-            or risk_profile != "balanced"
+        if protocol_record is not None:
+            prefix = f"{spec.name}_{protocol_record['name']}"
+            if not protocol_record["complete"]:
+                prefix += f"_n{protocol_record['missions_flown']}"
+            custom = preset is None or preset.to_dict() != spec.to_dict()
+        else:
+            prefix = f"{spec.name}_{world_id}_{regime_label}"
+            custom = preset is None or preset.to_dict() != spec.to_dict() or dynamic_risk is not None \
+                or risk_profile != "balanced"
         if custom:
             digest = hashlib.sha256(json.dumps(settings, sort_keys=True, default=str).encode()).hexdigest()
             prefix += f"_cfg{digest[:8]}"

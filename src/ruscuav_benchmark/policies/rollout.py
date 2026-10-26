@@ -20,11 +20,11 @@ The rows have the columns of the archived evaluations, in one of three formats:
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 import numpy as np
 
-from ..posthoc import DT_S, static_acceptability
+from ..posthoc import DEFAULT_BUDGETS, DT_S, static_acceptability
 
 Row = Dict[str, Any]
 
@@ -86,8 +86,10 @@ def _total_reward(rewards: List[float]) -> float:
 
 
 def posthoc_row(env: Any, seed: Optional[int], label: str, regime: Any, reset_info: Dict[str, Any],
-                rewards: List[float], info: Dict[str, Any], path: np.ndarray, steps: int) -> Row:
-    """Row of the primary policy evaluation (before the derived metrics)."""
+                rewards: List[float], info: Dict[str, Any], path: np.ndarray, steps: int,
+                budgets: Mapping[str, float] = DEFAULT_BUDGETS) -> Row:
+    """Row of the primary policy evaluation (before the derived metrics), with mission
+    acceptability recomputed with ``budgets``."""
     xy = path[:, :2]
     row: Row = {
         "episode": None,
@@ -122,7 +124,7 @@ def posthoc_row(env: Any, seed: Optional[int], label: str, regime: Any, reset_in
         "urban_hard_violation_steps": int(info.get("urban_hard_violation_steps", 0)),
         "reset_safe_start_target": bool(reset_info.get("urban_safe_start_target", False)),
     }
-    row["mission_acceptable"] = static_acceptability(row)
+    row["mission_acceptable"] = static_acceptability(row, budgets)
     return row
 
 
@@ -189,11 +191,13 @@ def transfer_row(env: Any, seed: Optional[int], label: str, rewards: List[float]
 
 def run_policy_episode(env: Any, policy: Any, seed: Optional[int], *, row_format: str, label: str,
                        regime: Any = None, options: Optional[Dict[str, Any]] = None, deterministic: bool = True,
-                       max_steps: int = 1000) -> Tuple[Row, np.ndarray]:
+                       max_steps: int = 1000, budgets: Mapping[str, float] = DEFAULT_BUDGETS) -> Tuple[Row, np.ndarray]:
     """Fly one episode of ``policy`` in ``env`` and return (row, flown path).
 
     ``label`` fills the ``method`` column (``policy_kind`` in the transfer format);
-    the posthoc format also records ``regime`` (an ``EvaluationRegime``).
+    the posthoc format also records ``regime`` (an ``EvaluationRegime``) and
+    recomputes mission acceptability with ``budgets`` (the other formats keep the
+    environment's verdict, from its mission configuration).
     """
     if row_format not in ROW_FORMATS:
         raise ValueError(f"row_format={row_format!r}; expected one of {list(ROW_FORMATS)}")
@@ -201,7 +205,7 @@ def run_policy_episode(env: Any, policy: Any, seed: Optional[int], *, row_format
         raise ValueError("the posthoc format records the evaluation regime; give regime")
     reset_info, rewards, info, path, steps = fly(env, policy, seed, options, deterministic, max_steps)
     if row_format == "posthoc":
-        row = posthoc_row(env, seed, label, regime, reset_info, rewards, info, path, steps)
+        row = posthoc_row(env, seed, label, regime, reset_info, rewards, info, path, steps, budgets)
     elif row_format == "dynamic":
         row = dynamic_row(env, seed, label, rewards, info, steps)
     else:

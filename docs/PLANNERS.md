@@ -32,7 +32,10 @@ world = UrbanWorldLayers.load_npz("worlds/synthetic/AOI_SYNTH_000/urban_world_la
 result = evaluate_planner(world, "FULL_RH_Astar", n_episodes=20, output_dir="runs/full_rh")
 print(result.summary["success_rate"], result.summary["mission_acceptability_rate"])
 
-# The recorded missions of the paper's canonical-world evaluation
+# The paper's protocol of the canonical world (its 200 missions, regime and budgets)
+result = evaluate_planner(world, "STATIC_Astar", protocol="canonical-primary")
+
+# The same missions from their CSV
 missions = missions_from_csv("scenarios/canonical/AOI_SYNTH_000_seed5000_n200.csv", world)
 result = evaluate_planner(world, "STATIC_Astar", missions=missions)
 
@@ -55,11 +58,17 @@ of the planner configuration (and `dynamic_prior_mode` that of the dynamic
 planner); the regime is `primary_no_terminal` (default) or
 `secondary_operational_stopping`, or give `stage` and `mode`. `risk_profile`
 (default `balanced`, as in every archived run) sets the risk profile of both the
-planner and the environment.
+planner and the environment. `protocol` (a protocol name or file,
+docs/PROTOCOLS.md) sets the missions, the regime, the risk profile, the budgets,
+the step length and the dynamic risk at once (the planner's `max_steps` must be the
+protocol's step limit) and records the protocol in the summary; `ruscuav score`
+then scores the run against others under it (docs/SCORING.md).
 
 The same from the command line:
 
 ```bash
+ruscuav evaluate --protocol canonical-primary --planner FULL_RH_Astar --output-dir runs/full_rh
+ruscuav evaluate --protocol canonical-dynamic --planner DYN_RH_Astar --output-dir runs/dyn_rh
 ruscuav evaluate --world worlds/synthetic/AOI_SYNTH_000/urban_world_layers.npz \
     --planner FULL_RH_Astar --scenarios scenarios/canonical/AOI_SYNTH_000_seed5000_n200.csv \
     --output-dir runs/full_rh

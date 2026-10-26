@@ -103,6 +103,37 @@
 - The dynamic-risk factories of `ruscuav_benchmark.env.legacy_factories` accept the
   notebook's own `M11DynamicRiskConfig`, so that `legacy_parity.py --env refactored`
   also runs the archived dynamic evaluators.
+- New `ruscuav_benchmark.protocols`: evaluation protocols (world checksum, missions,
+  regime, dynamic risk, budgets) as JSON files; the paper's `canonical-primary`,
+  `canonical-secondary`, `canonical-dynamic` and `vienna-primary` come with the
+  package, `make_protocol` and `ruscuav protocol create` record one for any world
+  (docs/PROTOCOLS.md). `evaluate_planner`, `evaluate_policy` and `ruscuav evaluate`
+  take `protocol=` / `--protocol`: the protocol then fixes the environment's
+  accounting (step length and limit, dynamics, cargo model, endings, budgets, regime,
+  risk profile, dynamic risk; `Protocol.environment_config`, `check_environment`),
+  and its budgets decide both the environment's and the post-hoc acceptability.
+  `posthoc_row`, `run_policy_episode` and the policy summaries take `budgets`.
+- New `ruscuav score` and `ruscuav_benchmark.scoring`: run summaries, training-seed
+  intervals, causes of non-acceptability, the dynamic-budget sweep and exact paired
+  tests with Holm's correction for any per-episode CSVs, with the archive's
+  arithmetic (docs/SCORING.md); `ruscuav_benchmark.stats` has the statistics and
+  `ruscuav_benchmark.paper_tables` rebuilds the paper's primary tables from the
+  archive, character for character. With `--protocol` it refuses runs evaluated
+  under another protocol, regime, world or dynamic risk.
+- New `ruscuav_benchmark.trajectories` and `ruscuav evaluate --trajectories`: flown
+  trajectories of any method (CSV, NPZ or `.npy` files) are scored on a protocol's
+  missions with the environment's accounting (docs/TRAJECTORIES.md), and steps the
+  environment's vehicle could not fly (speeds, workspace, motion into hazards) are
+  reported.
+- `ruscuav_benchmark.tables.read_rows_csv` reads CSVs as `pandas.read_csv` does
+  (types, skipped lines and, by default, its float parser), without pandas.
+- SciPy is a dependency of the package (the paired tests and intervals); `risk_profile`
+  of `evaluate_planner` and `evaluate_policy` defaults to None (balanced), and
+  `ruscuav evaluate --regime` and `--profile` default to unset.
+- `scripts/migration/score_parity.py` and `trajectory_parity.py` check the tables, the
+  CSV reader and the trajectory scoring against the archive, and `shield_steps.py`
+  replays what the geometric shield did on given steps; `scripts/make_protocols.py`
+  writes the protocol files.
 
 ## 2.0.0 — 2026-07-24
 

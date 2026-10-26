@@ -17,7 +17,8 @@ keywords = ["UAV", "urban navigation", "semantic risk", "mission acceptability",
 dependencies = [
   "numpy>=1.23",
   "matplotlib>=3.7",
-  "pyyaml>=6.0"
+  "pyyaml>=6.0",
+  "scipy>=1.10"
 ]
 
 [project.optional-dependencies]
@@ -52,3 +53,6 @@ version = {attr = "ruscuav_benchmark.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"ruscuav_benchmark.protocols" = ["*.json"]

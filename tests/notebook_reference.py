@@ -3,13 +3,29 @@ reference for the package's row-wise ports (tests only).
 
 From code/submission_repair/RUSCUAV_submission_repair_cells.py: ``as_bool_series``,
 ``num_col``, ``recompute_static_acceptability``, ``recompute_dynamic_acceptability``,
-``add_derived_metrics`` and ``summarize_episode_dataframe``. From
-src/ruscuav_benchmark/legacy/definitions.py: ``summarize_m11_dynamic_eval_df`` and
-``summarize_m12c_real_policy_eval_df``.
+``add_derived_metrics``, ``summarize_episode_dataframe``, ``training_seed_ci``,
+``non_acceptability_flags``, ``cause_decomposition``, ``dynamic_budget_sensitivity``,
+``paired_binary_counts``, ``paired_exact_p``, ``holm_adjust`` and
+``compute_holm_families``. From src/ruscuav_benchmark/legacy/definitions.py:
+``summarize_m11_dynamic_eval_df``, ``summarize_m12c_real_policy_eval_df`` and
+``ms_bootstrap_ci``. ``training_seed_ci_all_scopes`` is the aggregation loop of the
+one-click runner's ``stage_postprocess``
+(code/submission_repair/RUSCUAV_submission_repair_one_click_runner_v3.py).
 """
+
+from __future__ import annotations
+
+import math
+from pathlib import Path
+from typing import Iterable, Mapping
 
 import numpy as np
 import pandas as pd
+
+try:  # the statistics need SciPy; the other functions do not
+    from scipy.stats import binomtest, t as student_t
+except ImportError:  # pragma: no cover
+    binomtest = student_t = None
 
 DT_S = 0.5
 DEFAULT_BUDGETS = {
@@ -274,3 +290,255 @@ def summarize_m12c_real_policy_eval_df(df):
         summary["acceptable_given_success_rate"] = 0.0
 
     return summary
+
+
+def training_seed_ci(values: Iterable[float]) -> dict[str, float]:
+    vals = pd.to_numeric(pd.Series(list(values)), errors="coerce").dropna().to_numpy(float)
+    n = int(len(vals))
+    if n == 0:
+        return {"n": 0, "mean": np.nan, "std": np.nan, "ci95_low": np.nan, "ci95_high": np.nan}
+    mean = float(vals.mean())
+    if n == 1:
+        return {"n": 1, "mean": mean, "std": np.nan, "ci95_low": np.nan, "ci95_high": np.nan}
+    std = float(vals.std(ddof=1))
+    half = float(student_t.ppf(0.975, n - 1) * std / math.sqrt(n))
+    return {
+        "n": n,
+        "mean": mean,
+        "std": std,
+        "ci95_low": mean - half,
+        "ci95_high": mean + half,
+    }
+
+
+CAUSE_ORDER = [
+    "not_success",
+    "cargo_low",
+    "road_budget_exceeded",
+    "ped_budget_exceeded",
+    "building_budget_exceeded",
+    "sensitive_budget_exceeded",
+    "hard_violation",
+    "dynamic_budget_exceeded",
+]
+
+
+def non_acceptability_flags(df: pd.DataFrame, dynamic: bool = False) -> pd.DataFrame:
+    d = add_derived_metrics(df)
+    flags = pd.DataFrame(index=d.index)
+    success = as_bool_series(d["is_success"])
+    flags["not_success"] = ~success
+    flags["cargo_low"] = num_col(d, "cargo_health", 1.0) < DEFAULT_BUDGETS["cargo_min"]
+    flags["road_budget_exceeded"] = num_col(d, "road_time") > DEFAULT_BUDGETS["road_s"]
+    flags["ped_budget_exceeded"] = num_col(d, "sidewalk_time") > DEFAULT_BUDGETS["ped_s"]
+    flags["building_budget_exceeded"] = num_col(d, "building_time") > DEFAULT_BUDGETS["building_s"]
+    flags["sensitive_budget_exceeded"] = num_col(d, "sensitive_time") > DEFAULT_BUDGETS["sensitive_s"]
+    hard_col = "urban_hard_violation_steps" if "urban_hard_violation_steps" in d.columns else "hard_violation_steps"
+    flags["hard_violation"] = num_col(d, hard_col) > 0
+    flags["dynamic_budget_exceeded"] = (
+        num_col(d, "dynamic_cumulative_risk") > DEFAULT_BUDGETS["dynamic"]
+        if dynamic
+        else False
+    )
+    acceptable = recompute_dynamic_acceptability(d) if dynamic else recompute_static_acceptability(d)
+    flags["unacceptable"] = ~acceptable
+    flags["successful_but_unacceptable"] = success & (~acceptable)
+    return flags
+
+
+def cause_decomposition(df: pd.DataFrame, label: str, dynamic: bool = False) -> pd.DataFrame:
+    flags = non_acceptability_flags(df, dynamic=dynamic)
+    n_unacceptable = int(flags["unacceptable"].sum())
+    n_sbu = int(flags["successful_but_unacceptable"].sum())
+    rows = []
+    for cause in CAUSE_ORDER:
+        if cause not in flags.columns:
+            continue
+        rows.append(
+            {
+                "label": label,
+                "cause": cause,
+                "n_episodes": int(len(flags)),
+                "n_unacceptable": n_unacceptable,
+                "n_successful_but_unacceptable": n_sbu,
+                "count_among_unacceptable": int((flags[cause] & flags["unacceptable"]).sum()),
+                "share_among_unacceptable": (
+                    float((flags[cause] & flags["unacceptable"]).sum() / n_unacceptable)
+                    if n_unacceptable > 0
+                    else np.nan
+                ),
+                "count_among_successful_but_unacceptable": int(
+                    (flags[cause] & flags["successful_but_unacceptable"]).sum()
+                ),
+                "share_among_successful_but_unacceptable": (
+                    float(
+                        (flags[cause] & flags["successful_but_unacceptable"]).sum()
+                        / n_sbu
+                    )
+                    if n_sbu > 0
+                    else np.nan
+                ),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+DYNAMIC_BUDGET_SWEEP = [2.5, 5.0, 7.5, 10.0, 12.5, 15.0, 20.0, 35.0]
+
+
+def dynamic_budget_sensitivity(
+    df: pd.DataFrame,
+    label: str,
+    budgets: Iterable[float] = DYNAMIC_BUDGET_SWEEP,
+) -> pd.DataFrame:
+    d = add_derived_metrics(df)
+    static_ok = recompute_static_acceptability(d)
+    success = as_bool_series(d["is_success"])
+    dyn = num_col(d, "dynamic_cumulative_risk")
+    rows = []
+    for beta in budgets:
+        dyn_ok = dyn <= float(beta)
+        full = static_ok & dyn_ok
+        rows.append(
+            {
+                "label": label,
+                "beta_dyn": float(beta),
+                "success_rate": float(success.mean()),
+                "static_acceptability_rate": float(static_ok.mean()),
+                "dynamic_budget_ok_rate": float(dyn_ok.mean()),
+                "dynamic_mission_acceptability_rate": float(full.mean()),
+                "acceptable_given_success_rate": (
+                    float(full[success].mean()) if int(success.sum()) > 0 else np.nan
+                ),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def paired_binary_counts(df_a: pd.DataFrame, df_b: pd.DataFrame, metric: str) -> dict[str, int]:
+    a = df_a[["seed", metric]].copy()
+    b = df_b[["seed", metric]].copy()
+    a[metric] = as_bool_series(a[metric])
+    b[metric] = as_bool_series(b[metric])
+    paired = a.merge(b, on="seed", suffixes=("_a", "_b"), how="inner")
+    n_ab = int((paired[f"{metric}_a"] & ~paired[f"{metric}_b"]).sum())
+    n_ba = int((~paired[f"{metric}_a"] & paired[f"{metric}_b"]).sum())
+    return {"n_paired": int(len(paired)), "n_ab": n_ab, "n_ba": n_ba}
+
+
+def paired_exact_p(n_ab: int, n_ba: int) -> float:
+    discordant = int(n_ab + n_ba)
+    if discordant == 0:
+        return 1.0
+    return float(binomtest(k=min(n_ab, n_ba), n=discordant, p=0.5, alternative="two-sided").pvalue)
+
+
+def holm_adjust(raw_p: Iterable[float]) -> np.ndarray:
+    p = np.asarray(list(raw_p), dtype=float)
+    m = len(p)
+    order = np.argsort(p)
+    adjusted_sorted = np.empty(m, dtype=float)
+    running = 0.0
+    for rank, idx in enumerate(order):
+        value = min(1.0, (m - rank) * p[idx])
+        running = max(running, value)
+        adjusted_sorted[rank] = running
+    adjusted = np.empty(m, dtype=float)
+    for rank, idx in enumerate(order):
+        adjusted[idx] = adjusted_sorted[rank]
+    return adjusted
+
+
+def compute_holm_families(
+    comparison_spec: pd.DataFrame,
+    csv_registry: Mapping[str, str | Path],
+) -> pd.DataFrame:
+    """
+    comparison_spec columns:
+        family, comparison_id, method_a, method_b, metric, claim_driving
+    csv_registry maps method labels to per-episode CSVs.
+    """
+    rows = []
+    cache: dict[str, pd.DataFrame] = {}
+
+    for _, spec in comparison_spec.iterrows():
+        a_label, b_label = str(spec["method_a"]), str(spec["method_b"])
+        for label in [a_label, b_label]:
+            if label not in cache:
+                p = Path(csv_registry[label])
+                if not p.exists():
+                    raise FileNotFoundError(p)
+                df = add_derived_metrics(pd.read_csv(p))
+                # Ensure canonical binary metric aliases.
+                df["success"] = as_bool_series(df["is_success"])
+                df["MAR_static"] = recompute_static_acceptability(df)
+                if "dynamic_cumulative_risk" in df.columns:
+                    df["DynOK"] = num_col(df, "dynamic_cumulative_risk") <= DEFAULT_BUDGETS["dynamic"]
+                    df["MAR_dynamic"] = recompute_dynamic_acceptability(df)
+                cache[label] = df
+
+        metric = str(spec["metric"])
+        counts = paired_binary_counts(cache[a_label], cache[b_label], metric)
+        raw_p = paired_exact_p(counts["n_ab"], counts["n_ba"])
+        mean_a = float(as_bool_series(cache[a_label][metric]).mean())
+        mean_b = float(as_bool_series(cache[b_label][metric]).mean())
+        rows.append(
+            {
+                **spec.to_dict(),
+                **counts,
+                "rate_a": mean_a,
+                "rate_b": mean_b,
+                "effect_a_minus_b_pp": 100.0 * (mean_a - mean_b),
+                "p_raw": raw_p,
+            }
+        )
+
+    result = pd.DataFrame(rows)
+    result["family_size"] = result.groupby("family")["comparison_id"].transform("count")
+    result["p_holm"] = np.nan
+    for family, idx in result.groupby("family").groups.items():
+        result.loc[idx, "p_holm"] = holm_adjust(result.loc[idx, "p_raw"])
+    result["significant_holm_005"] = result["p_holm"] < 0.05
+    return result
+
+
+def ms_bootstrap_ci(values, stat_fn=np.mean, n_boot=2000, ci=0.95, seed=12345):
+    """
+    Episode-level bootstrap CI. This is secondary uncertainty only.
+    """
+    arr = np.asarray(values)
+
+    if arr.dtype.kind in {"b"}:
+        arr = arr.astype(float)
+    else:
+        arr = pd.to_numeric(pd.Series(arr), errors="coerce").dropna().to_numpy(dtype=float)
+
+    if len(arr) == 0:
+        return np.nan, np.nan, np.nan
+
+    rng = np.random.default_rng(int(seed))
+    n = len(arr)
+    boots = np.empty(int(n_boot), dtype=float)
+
+    for b in range(int(n_boot)):
+        idx = rng.integers(0, n, size=n)
+        boots[b] = float(stat_fn(arr[idx]))
+
+    alpha = 1.0 - float(ci)
+    estimate = float(stat_fn(arr))
+    lo = float(np.quantile(boots, alpha / 2.0))
+    hi = float(np.quantile(boots, 1.0 - alpha / 2.0))
+
+    return estimate, lo, hi
+
+
+def training_seed_ci_all_scopes(summary_df):
+    agg_rows = []
+    metrics = ["success_rate", "mission_acceptability_rate", "acceptable_given_success_rate"]
+    for (scope, label), group in summary_df.dropna(subset=["train_seed"]).groupby(["scope", "label"]):
+        if group["train_seed"].nunique() < 2:
+            continue
+        for metric in metrics:
+            if metric in group.columns:
+                agg_rows.append({"scope": scope, "method": label, "metric": metric, **training_seed_ci(group[metric])})
+    return pd.DataFrame(agg_rows)
