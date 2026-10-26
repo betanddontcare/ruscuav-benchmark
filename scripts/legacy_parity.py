@@ -15,14 +15,21 @@ Examples::
         --method PPO:RISK+GREEN-RL:4001 --episodes 5
     python scripts/legacy_parity.py --archive /data/RUSCUAV-v2.0.0 --work runs/parity \
         --method REWARD_FACTOR:risk_only:1001 --episodes 3
+    python scripts/legacy_parity.py --archive /data/RUSCUAV-v2.0.0 --work runs/parity \
+        --method POLICY:dynamic/DYN-OBS-RL/1001 --episodes 200 --code package
 
 With ``--env refactored`` the legacy evaluation code drives the refactored
 environment (ruscuav_benchmark.env) instead of the notebook classes: the
 notebook's environment factories are replaced by those of
 ruscuav_benchmark.env.legacy_factories before the episodes run.
 
-With ``--planners package`` the planner methods fly the planners of
-ruscuav_benchmark.planners in ruscuav_benchmark.env instead of the notebook's planner
+``--method POLICY:<name>`` re-runs one of the archived primary policy evaluations
+of ``ruscuav_benchmark.policies.ARCHIVED_EVALUATIONS`` (static, dynamic and Vienna),
+e.g. ``POLICY:dynamic/DYN-OBS-RL/1001``, with the notebook's evaluator for it.
+
+With ``--code package`` the planner methods fly the planners of
+ruscuav_benchmark.planners, and the policy evaluations run with
+ruscuav_benchmark.policies, in ruscuav_benchmark.env, instead of the notebook's
 code. The dynamic planner's rows then get the post-hoc columns of the archived
 evaluation (derived metrics, mission acceptability recomputed) from the notebook's
 own functions.
@@ -343,6 +350,52 @@ def run_reward_factor(ns, world, variant: str, seed: int, n: int, archive: Path,
     return read_csv(archived_csv), read_csv(csv_path), {"rerun_csv": str(csv_path), "model_path": str(model_path)}
 
 
+def run_policy(ns, name: str, n: int, seed0, archive: Path, work: Path, package: bool,
+               real_worlds: dict) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+    """An archived policy evaluation, re-run with the notebook's evaluator or the package."""
+    from ruscuav_benchmark.policies import ARCHIVED_EVALUATIONS, archived_checkpoint, evaluate_archived
+
+    entry = ARCHIVED_EVALUATIONS[name]
+    seed0 = entry.seed0 if seed0 is None else int(seed0)
+    world_path = Path(str(ns.CANONICAL_WORLD_PATH)) if entry.world == "canonical" else Path(real_worlds[entry.world])
+    model_path = archived_checkpoint(entry.checkpoint, archive)
+    info = {"checkpoint": entry.checkpoint, "model_path": str(model_path), "model_sha256": sha256_file(model_path),
+            "world_source": str(world_path), "world_layers_sha256": UrbanWorldLayers.load_npz(world_path).layers_sha256()}
+    archived = read_csv(archive / entry.episodes_csv)
+    tag = f"{name.replace('/', '_')}_n{n}_seed{seed0}_{int(time.time())}"
+    if package:
+        result = evaluate_archived(name, archive, world=UrbanWorldLayers.load_npz(world_path), n_episodes=n,
+                                   seed0=seed0, output_dir=work / "package_policies" / tag, save_paths=True)
+        return archived, read_csv(result.csv_path), {**info, "rerun_csv": str(result.csv_path)}
+    world = ns.UrbanWorldLayers.load_npz(world_path)
+    regime = ns.PRIMARY_NO_TERMINAL
+    if entry.row_format == "posthoc":
+        _, _, csv_path, _ = ns.evaluate_ppo_resume(
+            model_path=model_path,
+            env_factory=lambda seed: ns.make_static_eval_env(entry.method, world, regime, seed),
+            method=entry.label, regime=regime, output_dir=work / "ppo" / tag, n_episodes=n, seed0=seed0,
+            deterministic=True, save_paths=True,
+        )
+    else:
+        dirs = ns.setup_ruscuav_drive_project(drive_root=str(ns.RUSCUAV_VIRTUAL_DRIVE), experiment_name="legacy_parity")
+        if entry.row_format == "dynamic" and entry.method == "DYN-OBS-RL":
+            _, _, csv_path, _ = ns.evaluate_m11c_dynamic_obs_rl_drive(
+                model_path=model_path, world=world, drive_dirs=dirs, dynamic_config=ns.reported_dynamic_config(),
+                n_episodes=n, seed0=seed0, prefix=f"parity_{tag}", stage=regime.stage, mode=regime.mode,
+                save_paths=False)
+        elif entry.row_format == "dynamic":
+            _, _, csv_path, _ = ns.evaluate_m11_dynamic_rl_drive(
+                model_path=model_path, world=world, drive_dirs=dirs, dynamic_config=ns.reported_dynamic_config(),
+                n_episodes=n, seed0=seed0, prefix=f"parity_{tag}", stage=regime.stage, mode=regime.mode,
+                reward_only_obs=True, save_paths=False)
+        else:
+            _, _, csv_path, _ = ns.evaluate_m12c_real_policy_drive(
+                model_path=model_path, world=world, policy_kind=entry.label, drive_dirs=dirs, n_episodes=n,
+                seed0=seed0, prefix=f"parity_{tag}", stage=regime.stage, mode=regime.mode, deterministic=True,
+                save_paths=True)
+    return archived, read_csv(csv_path), {**info, "rerun_csv": str(csv_path)}
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     p.add_argument("--archive", required=True, type=Path, help="Extracted RUSCUAV-v2.0.0 Zenodo archive")
@@ -350,10 +403,12 @@ def main() -> int:
     p.add_argument("--method", required=True,
                    help="STATIC_Astar | LOCAL_RH_Astar | FULL_RH_Astar | DYN_RH_Astar | VIENNA_FULL_RH_Astar | "
                         "WARSAW_FULL_RH_Astar | PPO:<method>:<train seed or 'single'> | "
-                        "REWARD_FACTOR:<risk_only|green_only>:<train seed>")
+                        "REWARD_FACTOR:<risk_only|green_only>:<train seed> | POLICY:<archived evaluation, e.g. "
+                        "static/GEO-RL/1001, dynamic/DYN-OBS-RL/1001, vienna/RISK+GREEN-RL/short_finetuned>")
     p.add_argument("--episodes", type=int, default=5)
     p.add_argument("--seed0", type=int, default=None,
-                   help="first scenario seed for planners (default 5000; 7000 for real-GIS worlds)")
+                   help="first scenario seed for planners and POLICY evaluations (default: that of the archived "
+                        "run, 5000 or 7000 for real-GIS worlds)")
     p.add_argument("--real-world", action="append", default=[], metavar="CITY=NPZ",
                    help="processed footway-only real-GIS world for VIENNA_/WARSAW_ methods, e.g. "
                         "vienna=/data/vienna_prater_leopoldstadt_osm_1km_v1_footway_only_urban_world_layers.npz")
@@ -365,9 +420,9 @@ def main() -> int:
                    help="compare an existing re-run CSV instead of running episodes again")
     p.add_argument("--env", choices=("legacy", "refactored"), default="legacy",
                    help="environment the episodes run in: the notebook classes or ruscuav_benchmark.env")
-    p.add_argument("--planners", choices=("notebook", "package"), default="notebook",
-                   help="planner methods: the notebook's planner code or ruscuav_benchmark.planners "
-                        "(which always runs in ruscuav_benchmark.env)")
+    p.add_argument("--code", "--planners", dest="code", choices=("notebook", "package"), default="notebook",
+                   help="planner methods and POLICY evaluations: the notebook's code, or ruscuav_benchmark.planners "
+                        "and ruscuav_benchmark.policies (which always run in ruscuav_benchmark.env)")
     args = p.parse_args()
 
     archive, work = args.archive.resolve(), args.work.resolve()
@@ -383,6 +438,13 @@ def main() -> int:
         elif args.method.startswith("REWARD_FACTOR:"):
             _, variant, seed = args.method.split(":", 2)
             archived = read_csv(reward_factor_paths(archive, variant, int(seed))[1])
+        elif args.method.startswith("POLICY:"):
+            from ruscuav_benchmark.policies import ARCHIVED_EVALUATIONS
+
+            name = args.method.split(":", 1)[1]
+            if name not in ARCHIVED_EVALUATIONS:
+                p.error(f"unknown archived policy evaluation {name!r}; available: {', '.join(ARCHIVED_EVALUATIONS)}")
+            archived = read_csv(archive / ARCHIVED_EVALUATIONS[name].episodes_csv)
         else:
             _, method, seed = args.method.split(":", 2)
             run = "single_checkpoint" if seed == "single" else f"trainseed_{int(seed)}"
@@ -398,9 +460,19 @@ def main() -> int:
             given_cities.add(city)
         if args.method in REAL_PLANNERS and REAL_PLANNERS[args.method][0] not in given_cities:
             p.error(f"{args.method} needs --real-world {REAL_PLANNERS[args.method][0]}=PATH")
-        package = args.planners == "package"
-        if package and not (args.method in PLANNERS or args.method in REAL_PLANNERS):
-            p.error("--planners package applies to the planner methods only")
+        package = args.code == "package"
+        policy_name = args.method.split(":", 1)[1] if args.method.startswith("POLICY:") else None
+        if policy_name is not None:
+            from ruscuav_benchmark.policies import ARCHIVED_EVALUATIONS
+
+            if policy_name not in ARCHIVED_EVALUATIONS:
+                p.error(f"unknown archived policy evaluation {policy_name!r}; available: "
+                        f"{', '.join(ARCHIVED_EVALUATIONS)}")
+            city = ARCHIVED_EVALUATIONS[policy_name].world
+            if city != "canonical" and city not in given_cities:
+                p.error(f"{args.method} needs --real-world {city}=PATH")
+        if package and not (args.method in PLANNERS or args.method in REAL_PLANNERS or policy_name is not None):
+            p.error("--code package applies to the planner methods and POLICY evaluations only")
         ns = load_legacy_namespace(archive, work, extra_inputs=extra)
         if args.env == "refactored":
             use_refactored_env(ns)
@@ -420,6 +492,10 @@ def main() -> int:
             _, method, seed = args.method.split(":", 2)
             run = "single_checkpoint" if seed == "single" else f"trainseed_{int(seed)}"
             archived, rerun, info = run_ppo(ns, world, method, run, args.episodes, archive, work)
+        elif policy_name is not None:
+            real_worlds = {item.partition("=")[0]: item.partition("=")[2] for item in args.real_world}
+            archived, rerun, info = run_policy(ns, policy_name, args.episodes, args.seed0, archive, work, package,
+                                               real_worlds)
         elif args.method.startswith("REWARD_FACTOR:"):
             _, variant, seed = args.method.split(":", 2)
             if variant not in ("risk_only", "green_only"):
@@ -430,14 +506,14 @@ def main() -> int:
 
     if args.rerun_csv is not None:
         env = None
-    elif args.planners == "package":
+    elif args.code == "package":
         env = "package"
     else:
         env = args.env
     report = {"method": args.method, "env": env, "episodes": int(len(rerun)), "atol": args.atol,
               "rtol": args.rtol, **info, **compare_episodes(archived, rerun, args.atol, args.rtol),
               "elapsed_s": round(time.time() - t0, 1)}
-    report_path = work / f"parity_{args.method.replace(':', '_').replace('+', 'p')}_{env or 'rerun_csv'}.json"
+    report_path = work / f"parity_{args.method.replace(':', '_').replace('+', 'p').replace('/', '_')}_{env or 'rerun_csv'}.json"
     report_path.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
 
     ok = not report["mismatches"]

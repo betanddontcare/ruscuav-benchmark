@@ -1,13 +1,18 @@
 # Environment for re-running the archived evaluations (scripts/legacy_parity.py).
-# These are the versions the archived checkpoints record in their system_info
-# (Python 3.12, NumPy 2.0.2, Stable-Baselines3 2.8.0, Gymnasium 1.2.3, PyTorch 2.11.0)
-# and the versions of the archived Colab environment for the rest. The parity check of
-# 2026-10-25 passed with exactly this set on Python 3.12 (see docs/REPRODUCIBILITY.md).
+# The archived checkpoints record in their system_info Python 3.12, NumPy 2.0.2,
+# PyTorch 2.11.0 (CPU build) and Stable-Baselines3 2.8.0 with Gymnasium 1.2.3 (11 of
+# them) or 2.9.0 with 1.3.0 (30); the rest are the versions of the archived Colab
+# environment. The parity checks of 2026-10-25 passed with this set on Python 3.12
+# (bottleneck, which only changes the std of the notebook's summaries, was added for the
+# last of them; see docs/REPRODUCIBILITY.md).
 
 # Core verification
 numpy==2.0.2
 pandas==2.2.2
 pyyaml==6.0.3
+# pandas computes std with bottleneck when it is installed, as in the archived Colab
+# environment (the archived summaries' std_reward values)
+bottleneck==1.4.2
 
 # Model loading and re-evaluation
 stable-baselines3==2.8.0

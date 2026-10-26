@@ -64,9 +64,45 @@
 - The JSON of the canonical-world missions also records the world file, its layers
   checksum and the cross-check in `ruscuav_benchmark.env` (the CSV is unchanged).
 - `scripts/legacy_parity.py` re-runs the archived dynamic planner evaluation
-  (`DYN_RH_Astar`) and, with `--planners package`, flies the package planners;
+  (`DYN_RH_Astar`) and, with `--code package`, flies the package planners;
   `scripts/migration/planner_parity.py` compares notebook and package planners step
   by step, and `make_planner_golden.py` records the test episodes.
+- The urban LiDAR evaluates all samples of a scan at once, and the cell lookups of
+  `UrbanRiskModel` no longer go through NumPy scalars: environment steps are about
+  50 times faster, with results identical bit for bit (docs/REPRODUCIBILITY.md).
+  New: `UrbanRiskModel.cells_from_xy`, `UrbanHazardModel.unsafe_at_altitude`,
+  `UrbanLidar.ray_hit_distances` and `UrbanLidar.march` (the sample-by-sample march).
+- New `ruscuav_benchmark.policies` (extra `rl`: Stable-Baselines3): the 41 PPO
+  checkpoints of the archive (`ARCHIVED_CHECKPOINTS`, `archived_checkpoint` checks
+  their SHA-256) and its 31 primary policy evaluations (`ARCHIVED_EVALUATIONS`,
+  `evaluate_archived`); `evaluate_policy` flies a checkpoint, a model with
+  `predict` or a function of the observation and writes the per-episode rows and
+  summaries of the archived evaluations, in their `posthoc`, `dynamic` or
+  `transfer` format; `train_ppo` trains with the paper's PPO settings and
+  curriculum; `TargetSeekingPolicy` and `ConstantPolicy` are simple reference
+  policies (docs/POLICIES.md).
+- New `ruscuav_benchmark.posthoc`: the post-hoc step of the archived primary
+  evaluations (mission acceptability recomputed with the paper's budgets, derived
+  rates and fractions, summaries over all, successful and acceptable episodes).
+- `ruscuav evaluate --policy PATH --method METHOD` and `--checkpoint KEY --archive DIR`
+  fly policies (`--format`, `--label`, `--stochastic`); `--evaluation NAME --archive DIR`
+  re-runs an archived policy evaluation. `--world` is not needed for archived
+  evaluations of the canonical world.
+- `ruscuav_benchmark.tables` holds the CSV writer and the summary statistics shared
+  by planners and policies; `missions_from_csv` moved to `ruscuav_benchmark.scenarios`
+  (still importable from `ruscuav_benchmark.planners`). Planner summaries count
+  successes as pandas compares cells (`numpy.bool_` and 1 count too).
+- `requirements-reproducibility.txt` pins bottleneck 1.4.2, which pandas used for the
+  standard deviations of the archived summaries, and records the library versions
+  of the checkpoints correctly.
+- `scripts/legacy_parity.py --method POLICY:<name>` re-runs an archived policy
+  evaluation with the notebook's evaluator or, with `--code package` (formerly
+  `--planners package`, which still works), with `ruscuav_benchmark.policies`;
+  `scripts/migration/policy_parity.py` compares notebook and package policy rollouts
+  step by step, and `make_policy_golden.py` records the test episodes.
+- The dynamic-risk factories of `ruscuav_benchmark.env.legacy_factories` accept the
+  notebook's own `M11DynamicRiskConfig`, so that `legacy_parity.py --env refactored`
+  also runs the archived dynamic evaluators.
 
 ## 2.0.0 — 2026-07-24
 

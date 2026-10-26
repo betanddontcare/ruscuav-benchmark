@@ -62,8 +62,9 @@ python scripts/legacy_parity.py --archive /path/to/RUSCUAV-v2.0.0 --work runs/pa
 ```
 
 Check performed on 2026-10-25 (Python 3.12, NumPy 2.0.2, SciPy 1.16.3, Gymnasium
-1.2.3, Stable-Baselines3 2.8.0 and PyTorch 2.11.0, matching the versions recorded in
-the archived checkpoints):
+1.2.3, Stable-Baselines3 2.8.0 and PyTorch 2.11.0; the archived checkpoints record
+PyTorch 2.11.0 and Stable-Baselines3 2.8.0 with Gymnasium 1.2.3, or 2.9.0 with
+1.3.0):
 
 | Method | Episodes (seeds) | Result |
 |---|---|---|
@@ -77,7 +78,8 @@ the archived checkpoints):
 The PPO position differences come from float32 arithmetic in the policy network:
 the archive was produced with the CPU-only PyTorch wheel, the check used the CUDA
 wheel running on CPU. `legacy_parity.py` therefore compares numbers with a relative
-tolerance of 1e-5 (`--rtol`), which these differences stay well within.
+tolerance of 1e-5 (`--rtol`), which these differences stay well within. Over full
+evaluations they occasionally change a flight ("The policies" below).
 
 The restored reward-factor variants were checked against the archived strict
 (stage C) reward-factor evaluations, `experiments/paperA_reward_factor_*`, with the
@@ -114,9 +116,10 @@ The variants cover every stage, mode, method preset, safety-stack ablation, shie
 diagnostic, risk profile, dynamic and real-world configuration: 39 in all. Each
 was flown on missions 5003 and 5011 with a target-seeking and a random policy, two
 episodes per run. The second episode starts with an unseeded reset, as in
-training. That gives 164 runs and 38,482 steps, with no difference. Of the
-episodes, 153 ended in success, 3 in shield-stuck, 12 in stage C stops (sensitive
-zone, building collision), and the rest at the 150-step cap.
+training. That gives 156 runs and 36,588 steps, with no difference. Of the 312
+episodes, 145 ended in success, 3 in shield-stuck, 12 in stage C stops (sensitive
+zone, building collision), and the rest at the 150-step cap. (These are the numbers
+of the repeat after the LiDAR change below.)
 
 ```bash
 python scripts/migration/env_parity.py --archive /path/to/RUSCUAV-v2.0.0 --variants all \
@@ -178,6 +181,24 @@ inside `env.reset(seed)`, are recorded in
 `scenarios/canonical/AOI_SYNTH_000_seed5000_n200.csv` by
 `scripts/materialize_legacy_scenarios.py`.
 
+**The vectorized LiDAR.** The urban LiDAR used to march every ray sample by sample,
+with a hazard lookup per sample: 95 % of the time of a step. It now evaluates all
+samples of a scan at once (`UrbanLidar.ray_hit_distances`, with
+`UrbanHazardModel.unsafe_at_altitude` and `UrbanRiskModel.cells_from_xy`), with
+the arithmetic of the sample-by-sample march, which is kept as `UrbanLidar.march`;
+the scalar cell lookup no longer goes through NumPy scalars. A planner episode
+takes 0.7 s instead of 38 s. The results are the same bit for bit: both checks
+above were repeated with the change (the 156 runs of `env_parity.py` and every
+path and function check of `env_parity_paths.py`, with no difference), and so were
+the planner comparisons below (the 40 episodes and 20 function checks of the
+step-by-step comparison were identical again, and the 1,000 re-run episodes of the
+archived planner evaluations gave the same rows as before the change, bit for
+bit). The policy comparisons were all made with the vectorized LiDAR. A comparison
+of the two LiDAR codes on 950 random scans in the canonical world, AOI_SYNTH_001–003
+and the Vienna world, with the presets' and odd ray counts, ranges and steps, also
+found no difference; `tests/test_lidar_equivalence.py` repeats it on any machine,
+with the fallback paths for NaN positions, integer directions and empty ranges.
+
 ## The planners
 
 `ruscuav_benchmark.planners` (docs/PLANNERS.md) replaces the notebook's M9, M10 and
@@ -213,7 +234,7 @@ episodes (2,883 steps, 552 plans) and the 20 function checks were identical.
 python scripts/migration/planner_parity.py --archive /path/to/RUSCUAV-v2.0.0
 ```
 
-**The archived evaluations.** With `--planners package`, `scripts/legacy_parity.py`
+**The archived evaluations.** With `--code package`, `scripts/legacy_parity.py`
 flies the package planners in `ruscuav_benchmark.env` and compares their rows with
 the archived per-episode CSVs, as above. All 200 episodes of each primary planner
 evaluation were re-run:
@@ -233,8 +254,8 @@ terminations, final distances, exposure times and cargo health are identical. Th
 notebook code gives the same values as the package on this machine (checked for
 STATIC_Astar 5008, FULL_RH_Astar 5106, DYN_RH_Astar 5001 and Vienna 7004), so
 the differences come from the floating-point arithmetic of the machine that
-produced the archive, not from the port. The 200 episodes of one planner take
-70–90 minutes on one core.
+produced the archive, not from the port. The 200 episodes of one planner take 3–5
+minutes on one core (70–90 minutes before the vectorized LiDAR).
 
 For the dynamic planner, `legacy_parity.py` applies the archived evaluation's
 post-hoc step with the notebook's functions (docs/PLANNERS.md). From the archived
@@ -246,7 +267,7 @@ statistics of the post-hoc step). `tests/test_planner_outputs.py` checks this wh
 
 ```bash
 python scripts/legacy_parity.py --archive /path/to/RUSCUAV-v2.0.0 --work runs/parity \
-    --method DYN_RH_Astar --episodes 200 --planners package
+    --method DYN_RH_Astar --episodes 200 --code package
 ```
 
 `tests/test_planner_episodes.py` replays ten episodes recorded from the notebook
@@ -255,6 +276,131 @@ first 30 steps of each planner, and of the dynamic planner also in stage C, a
 static flight to the target, and planning failures at the start and in mid-flight.
 It compares the rows, the plans and the reset info; with `RUSCUAV_EXACT_GOLDEN=1`
 bit for bit.
+
+## The policies
+
+`ruscuav_benchmark.policies` (docs/POLICIES.md) replaces the notebook's policy
+evaluators. It was compared with the notebook code and the archive in three ways,
+with the software versions above.
+
+**Step by step.** `scripts/migration/policy_parity.py` flies an archived checkpoint
+twice on the same mission: with the notebook's rollout function in the notebook
+environment, and with `ruscuav_benchmark.policies.run_policy_episode` in
+`ruscuav_benchmark.env`. It compares every observation the policy receives, every
+action it returns, the flown path, the episode row and the derived post-hoc
+columns, bit for bit. The 19 episodes cover the three row formats with checkpoints
+of every method of the evaluations below (GEO-RL, OBS-RL, RISK+GREEN-RL and
+RISK+OBS-RL; the static-trained RISK+GREEN-RL, DYN-OBS-RL and DYN-RISK-RL with
+dynamic risk; the transfer format in the canonical world), both regimes, and the
+four archived Vienna evaluations: 2,144 steps, all identical.
+
+```bash
+python scripts/migration/policy_parity.py --archive /path/to/RUSCUAV-v2.0.0 \
+    --vienna /path/to/vienna_prater_leopoldstadt_osm_1km_v1_footway_only_urban_world_layers.npz
+```
+
+**The archived evaluations.** `scripts/legacy_parity.py --method POLICY:<name>
+--code package` re-runs an archived evaluation with `evaluate_archived` and
+compares its rows with the archived CSV, as above: integers, flags and text
+exactly, other numbers to within a relative 1e-5. All 31 evaluations were re-run,
+200 episodes each. In the table, a "same flight" has the steps, ending, collision
+and violation counts and verdicts of the archived episode, and its other values
+within 0.1 %; an "other flight" differs in one of these.
+
+| Evaluation | Archived: success / acceptable (%) | Re-run | Rows within tolerance | Same flight, values within 0.1 % | Other flight |
+|---|---|---|---|---|---|
+| `static/GEO-RL/1001` | 77.5 / 70.0 | 77.0 / 69.5 | 194 | 1 | 5 |
+| `static/GEO-RL/2001` | 77.0 / 66.5 | 77.0 / 66.5 | 194 | 3 | 3 |
+| `static/GEO-RL/3001` | 81.5 / 74.5 | 81.5 / 74.5 | 192 | 2 | 6 |
+| `static/GEO-RL/4001` | 82.0 / 76.0 | 82.5 / 76.5 | 198 | 0 | 2 |
+| `static/GEO-RL/5001` | 78.5 / 68.0 | 78.5 / 68.0 | 190 | 6 | 4 |
+| `static/OBS-RL/1001` | 80.0 / 71.0 | 80.0 / 71.0 | 193 | 2 | 5 |
+| `static/OBS-RL/2001` | 82.0 / 71.5 | 82.0 / 71.5 | 196 | 0 | 4 |
+| `static/OBS-RL/3001` | 83.0 / 70.5 | 82.5 / 70.0 | 190 | 8 | 2 |
+| `static/OBS-RL/4001` | 80.5 / 69.5 | 80.5 / 69.5 | 195 | 5 | 0 |
+| `static/OBS-RL/5001` | 87.0 / 78.0 | 87.0 / 78.0 | 197 | 1 | 2 |
+| `static/RISK+GREEN-RL/1001` | 83.5 / 74.5 | 83.5 / 74.5 | 195 | 1 | 4 |
+| `static/RISK+GREEN-RL/2001` | 81.0 / 71.5 | 81.0 / 71.5 | 197 | 0 | 3 |
+| `static/RISK+GREEN-RL/3001` | 88.0 / 82.5 | 87.5 / 82.0 | 195 | 2 | 3 |
+| `static/RISK+GREEN-RL/4001` | 88.0 / 77.0 | 88.0 / 77.0 | 192 | 4 | 4 |
+| `static/RISK+GREEN-RL/5001` | 81.5 / 73.5 | 81.5 / 73.5 | 188 | 6 | 6 |
+| `static/RISK+OBS-RL/single` | 88.0 / 78.5 | 88.0 / 78.5 | 194 | 3 | 3 |
+| `dynamic/RISK+GREEN-RL/1001` | 83.5 / 47.0 | 83.5 / 47.0 | 194 | 2 | 4 |
+| `dynamic/RISK+GREEN-RL/2001` | 81.0 / 47.0 | 81.0 / 47.0 | 196 | 1 | 3 |
+| `dynamic/RISK+GREEN-RL/3001` | 88.0 / 54.0 | 87.5 / 54.0 | 195 | 2 | 3 |
+| `dynamic/RISK+GREEN-RL/4001` | 88.0 / 51.5 | 88.0 / 51.5 | 192 | 4 | 4 |
+| `dynamic/RISK+GREEN-RL/5001` | 81.5 / 48.0 | 81.5 / 48.0 | 187 | 7 | 6 |
+| `dynamic/DYN-OBS-RL/1001` | 80.0 / 47.0 | 80.0 / 47.0 | 190 | 5 | 5 |
+| `dynamic/DYN-OBS-RL/2001` | 89.0 / 50.5 | 89.0 / 50.5 | 196 | 1 | 3 |
+| `dynamic/DYN-OBS-RL/3001` | 73.0 / 29.5 | 73.5 / 29.5 | 187 | 3 | 10 |
+| `dynamic/DYN-OBS-RL/4001` | 87.5 / 47.0 | 87.5 / 47.0 | 196 | 3 | 1 |
+| `dynamic/DYN-OBS-RL/5001` | 83.0 / 52.5 | 82.5 / 52.5 | 192 | 1 | 7 |
+| `dynamic/DYN-RISK-RL/single` | 84.5 / 49.0 | 84.5 / 49.5 | 193 | 4 | 3 |
+| `vienna/GEO-RL/1001` | 84.5 / 50.5 | 84.5 / 50.5 | 195 | 2 | 3 |
+| `vienna/RISK+GREEN-RL/extended_finetuned` | 87.0 / 51.5 | 87.0 / 51.5 | 193 | 3 | 4 |
+| `vienna/RISK+GREEN-RL/short_finetuned` | 87.5 / 46.0 | 87.5 / 46.0 | 197 | 2 | 1 |
+| `vienna/RISK+GREEN-RL/zero_shot` | 82.5 / 47.0 | 82.5 / 47.0 | 196 | 2 | 2 |
+| All 31 (6,200 episodes) | | | 5,999 | 86 | 115 |
+
+Of the 6,200 episodes, 5,999 (96.8 %) match the archived rows, 86 (1.4 %) are the
+same flight with slightly different values, and 115 (1.9 %) are another flight. Of
+these, 13 changed their success and 9 their acceptability, in both directions: the
+success rates of 7 evaluations and the acceptability rates of 5 differ from the
+archived ones by one episode (0.5 percentage points), and the means over the five
+training seeds by at most 0.1 points (success of OBS-RL, for example, 82.5 %
+archived and 82.4 % re-run). The other rates are the archived ones.
+
+Unlike the planner rows, the policy rows are almost never identical: one row is
+identical bit for bit, and 10 agree to within 1e-9. The differences come from the
+float32 arithmetic of the policy network, which the closed loop amplifies, and not
+from the package:
+
+- On one machine, the package flies the notebook's flights bit for bit (above).
+- The notebook's own evaluators, run on this machine, give the package's rows, not
+  the archived ones. They gave, bit for bit, the package's 200 rows of
+  `static/GEO-RL/1001`, `dynamic/RISK+GREEN-RL/1001`, `dynamic/DYN-OBS-RL/1001` and
+  `vienna/RISK+GREEN-RL/extended_finetuned`, one evaluation for each of the four
+  evaluators, in `ruscuav_benchmark.env` (`--code notebook --env refactored`). In
+  the notebook environment they gave the package's rows of six other flights
+  (`static/GEO-RL/1001` 5006 and 5015, `static/GEO-RL/2001` 5072,
+  `static/RISK+GREEN-RL/1001` 5081 and 5091, `static/RISK+GREEN-RL/3001` 5048).
+- The archive was produced in Colab with the CPU-only build of PyTorch 2.11.0; the
+  re-runs used the CUDA build, on the CPU of another machine. The planners, which
+  have no network, reproduce their archived rows with at most last-bit differences
+  in risk values.
+- The smallest change of the actions is enough. Moving each component of every
+  action of the package's re-run by one float32 ulp, up or down at random, changes
+  the rows as much as the other machine did: of the 600 episodes of
+  `static/GEO-RL/1001`, `dynamic/DYN-OBS-RL/1001` and
+  `vienna/RISK+GREEN-RL/extended_finetuned`, 582 match the unperturbed re-run
+  within the tolerance, 5 are the same flight and 13 another one (577, 9 and 14
+  against the archive), and none is identical.
+
+A re-run on another machine can therefore be expected to reproduce the rates
+closely, not every row. A re-run of 200 episodes takes 6–14 minutes here (three
+runs sharing two cores).
+
+```bash
+python scripts/legacy_parity.py --archive /path/to/RUSCUAV-v2.0.0 --work runs/parity \
+    --method POLICY:dynamic/DYN-OBS-RL/1001 --episodes 200 --code package
+python scripts/legacy_parity.py --archive /path/to/RUSCUAV-v2.0.0 --work runs/parity \
+    --method POLICY:vienna/RISK+GREEN-RL/short_finetuned --episodes 200 --code package \
+    --real-world vienna=/path/to/vienna_prater_leopoldstadt_osm_1km_v1_footway_only_urban_world_layers.npz
+```
+
+**Tables and golden episodes.** From the archived episode rows,
+`ruscuav_benchmark.posthoc` and `summarize_policy_rows` give the archived derived
+columns and summaries of all 31 evaluations exactly (and those of the primary
+dynamic planner evaluation); `tests/test_policies.py` checks this when
+`RUSCUAV_ARCHIVE` points to the archive, and checks the code against the notebook's
+pandas functions (`tests/notebook_reference.py`) without it.
+`tests/test_policy_episodes.py` replays twelve episodes recorded from the
+notebook's rollout functions with the simple policies of
+`ruscuav_benchmark.policies.simple` (`scripts/migration/make_policy_golden.py`), so
+it needs neither PyTorch nor the archive: every row format, both regimes,
+successes, stuck and shield-stuck endings, episodes cut short and episodes of zero
+steps. With `RUSCUAV_EXACT_GOLDEN=1` it also compares digests of the observations,
+actions and paths, bit for bit.
 
 ## Real-GIS worlds (Vienna, Warsaw)
 
@@ -282,7 +428,7 @@ all 200 episodes, 7000–7199 ("The planners"):
 
 ```bash
 python scripts/legacy_parity.py --archive /path/to/RUSCUAV-v2.0.0 --work runs/parity \
-    --method VIENNA_FULL_RH_Astar --episodes 200 --planners package \
+    --method VIENNA_FULL_RH_Astar --episodes 200 --code package \
     --real-world vienna=/path/to/vienna_prater_leopoldstadt_osm_1km_v1_footway_only_urban_world_layers.npz
 ```
 

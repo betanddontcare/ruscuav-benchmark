@@ -9,11 +9,9 @@ extra.
 
 from __future__ import annotations
 
-import csv
 import hashlib
 import json
 import math
-import warnings
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,7 +19,8 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tupl
 
 import numpy as np
 
-from ..scenarios import mission_from_row, read_scenarios, scenario_seed
+from ..scenarios import Episode, episode_list
+from ..tables import Row, is_true, jsonable, mean_of, median_of, std_of, termination_counts, write_rows_csv
 from ..world import UrbanWorldLayers, canonical_aoi_id
 from .config import PLANNER_PRESETS, PlannerSpec, get_planner
 from .dynamic import DynamicRecedingPlanner
@@ -30,9 +29,6 @@ from .receding import RecedingHorizonPlanner
 from .rollout import run_dynamic_episode, run_receding_episode, run_static_episode
 from .static import StaticPlanner
 
-Row = Dict[str, Any]
-#: (seed, reset options or None) of one episode.
-Episode = Tuple[Optional[int], Optional[Dict[str, Any]]]
 
 
 @dataclass
@@ -55,47 +51,6 @@ def make_planner(spec: PlannerSpec, world: UrbanWorldLayers, risk_profile: str =
     if spec.kind == "receding":
         return RecedingHorizonPlanner(world, spec.config, risk_profile, grid)
     return DynamicRecedingPlanner(world, spec.config, risk_profile, spec.dynamic_prior_mode, grid)
-
-
-def missions_from_csv(path: Union[str, Path], world: Optional[UrbanWorldLayers] = None,
-                      seed0: int = 5000) -> List[Episode]:
-    """Episodes of a scenario CSV (rows of ``world`` only, when given).
-
-    The episode seed is the row's ``seed``, or ``seed0`` plus the row index when the
-    file has none. The seed sets the environment's random state and the dynamic risk
-    field, so rows that share a seed (files written with one generation seed) share
-    one dynamic field; a warning says so.
-    """
-    rows = read_scenarios(path, world_id=None if world is None else world.aoi_id)
-    episodes = []
-    for index, row in enumerate(rows):
-        seed = scenario_seed(row)
-        episodes.append((seed0 + index if seed is None else seed, mission_from_row(row)))
-    seeds = [seed for seed, _ in episodes]
-    if len(set(seeds)) < len(seeds):
-        warnings.warn(f"{path}: {len(seeds) - len(set(seeds))} rows repeat a seed; episodes with the same seed "
-                      "have the same random state and dynamic risk field", stacklevel=2)
-    return episodes
-
-
-def _episodes(seeds: Optional[Iterable[int]], missions: Optional[Sequence[Episode]], n_episodes: Optional[int],
-              seed0: int) -> List[Episode]:
-    if seeds is not None and missions is not None:
-        raise ValueError("give seeds or missions, not both")
-    if n_episodes is not None and int(n_episodes) < 1:
-        raise ValueError(f"n_episodes must be at least 1, got {n_episodes}")
-    if missions is not None:
-        episodes = [(None if s is None else int(s), o) for s, o in missions]
-    elif seeds is not None:
-        episodes = [(int(s), None) for s in seeds]
-    else:
-        episodes = [(int(seed0) + i, None) for i in range(200 if n_episodes is None else int(n_episodes))]
-    if missions is not None or seeds is not None:
-        if n_episodes is not None:
-            episodes = episodes[: int(n_episodes)]
-    if not episodes:
-        raise ValueError("no episodes to evaluate")
-    return episodes
 
 
 def _env_factory(spec: PlannerSpec, world: UrbanWorldLayers, regime: Optional[str], stage: Optional[str],
@@ -162,7 +117,7 @@ def evaluate_planner(
     spec = get_planner(planner) if isinstance(planner, str) else planner
     if config_changes:
         spec = spec.with_config(**config_changes)
-    episodes = _episodes(seeds, missions, n_episodes, seed0)
+    episodes = episode_list(seeds, missions, n_episodes, seed0)
     new_env, env_config = _env_factory(spec, world, regime, stage, mode, risk_profile, dynamic_risk)
     grid = RiskCostGrid(world, spec.config, risk_profile)
     planner_obj = make_planner(spec, world, risk_profile, grid)
@@ -245,114 +200,13 @@ def evaluate_planner(
     return PlannerEvaluation(spec, rows, summary, csv_path, summary_path, paths)
 
 
-# ---------------------------------------------------------------------- output
-def _missing(value: Any) -> bool:
-    return value is None or (isinstance(value, (float, np.floating)) and math.isnan(float(value)))
-
-
-def _column_kind(values: List[Any]) -> str:
-    """The dtype pandas would give a column of these values: bool, int, float or object."""
-    present = [v for v in values if not _missing(v)]
-    if present and all(isinstance(v, (bool, np.bool_)) for v in present):
-        return "bool" if len(present) == len(values) else "object"
-    numbers = [v for v in present if isinstance(v, (int, float, np.integer, np.floating))
-               and not isinstance(v, (bool, np.bool_))]
-    if len(numbers) == len(present):
-        if len(present) == len(values) and all(isinstance(v, (int, np.integer)) for v in present):
-            return "int"
-        return "float"
-    return "object"
-
-
-def _csv_value(value: Any, kind: str) -> str:
-    if _missing(value):
-        return ""
-    if isinstance(value, (bool, np.bool_)):
-        return str(bool(value))
-    if kind == "float" or isinstance(value, (float, np.floating)):
-        return repr(float(value))
-    return str(value)
-
-
-def write_rows_csv(path: Union[str, Path], rows: List[Row]) -> Path:
-    """Write episode rows as ``pandas.DataFrame(rows).to_csv(index=False)`` would:
-    columns in order of first appearance, empty cells for missing values and NaN,
-    integer columns with gaps written as floats."""
-    columns: List[str] = []
-    for row in rows:
-        columns.extend(key for key in row if key not in columns)
-    kinds = {key: _column_kind([row.get(key) for row in rows]) for key in columns}
-    path = Path(path)
-    with path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f, lineterminator="\n")
-        writer.writerow(columns)
-        for row in rows:
-            writer.writerow([_csv_value(row.get(key), kinds[key]) for key in columns])
-    return path
-
-
-def _jsonable(obj: Any) -> Any:
-    if isinstance(obj, dict):
-        return {str(k): _jsonable(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [_jsonable(v) for v in obj]
-    if isinstance(obj, (np.bool_,)):
-        return bool(obj)
-    if isinstance(obj, (np.integer,)):
-        return int(obj)
-    if isinstance(obj, (float, np.floating)):
-        value = float(obj)
-        return None if math.isnan(value) or math.isinf(value) else value
-    return obj
-
-
-# ---------------------------------------------------------------------- summary
-def _column(rows: List[Row], key: str) -> np.ndarray:
-    values = []
-    for row in rows:
-        value = row.get(key)
-        values.append(np.nan if value is None else float(value))
-    return np.asarray(values, dtype=np.float64)
-
-
-def _mean(rows: List[Row], key: str) -> float:
-    """``pandas.Series.mean``: NaN set to 0 for the sum, divided by the count of values."""
-    col = _column(rows, key)
-    mask = np.isnan(col)
-    count = int((~mask).sum())
-    if count == 0:
-        return float("nan")
-    return float(np.where(mask, 0.0, col).sum() / count)
-
-
-def _std(rows: List[Row], key: str) -> float:
-    """Population standard deviation by a sequential two-pass sum over the values, as
-    pandas computes ``Series.std(ddof=0)`` with bottleneck (the archived summaries)."""
-    values = [v for v in _column(rows, key).tolist() if not math.isnan(v)]
-    if not values:
-        return float("nan")
-    total = 0.0
-    for v in values:
-        total += v
-    mean = total / len(values)
-    squares = 0.0
-    for v in values:
-        squares += (v - mean) * (v - mean)
-    return math.sqrt(squares / len(values))
-
-
-def _median(rows: List[Row], key: str) -> float:
-    col = _column(rows, key)
-    col = col[~np.isnan(col)]
-    return float(np.median(col)) if col.size else float("nan")
-
-
-def _termination_counts(rows: List[Row]) -> Dict[str, int]:
-    counts: Dict[str, int] = {}
-    for row in rows:
-        key = "None" if row.get("termination") is None else str(row["termination"])
-        counts[key] = counts.get(key, 0) + 1
-    return dict(sorted(counts.items(), key=lambda item: -item[1]))
+# ---------------------------------------------------------------------- output and summary
+# Shared with the policy evaluations (ruscuav_benchmark.tables).
+_jsonable = jsonable
+_mean = mean_of
+_std = std_of
+_median = median_of
+_termination_counts = termination_counts
 
 
 def summarize_planner_rows(rows: List[Row], kind: str) -> Dict[str, Any]:
@@ -361,7 +215,7 @@ def summarize_planner_rows(rows: List[Row], kind: str) -> Dict[str, Any]:
     metrics, termination counts)."""
     if not rows:
         return {"n_episodes": 0}
-    successes = [row for row in rows if row.get("is_success") is True]
+    successes = [row for row in rows if is_true(row.get("is_success"))]
     s: Dict[str, Any] = {"n_episodes": len(rows)}
     if kind == "static":
         s["planner_path_found_rate"] = _mean(rows, "planner_success")

@@ -15,8 +15,8 @@ Procedural cylinder/cone obstacles of the v14 base environment are not supported
 
 from __future__ import annotations
 
-from dataclasses import asdict
-from typing import Optional
+from dataclasses import asdict, is_dataclass
+from typing import Any, Optional
 
 from ..world import UrbanWorldLayers
 from .config import (
@@ -63,6 +63,17 @@ M8_VARIANT_PRESETS = {
 
 def reported_dynamic_config() -> DynamicRiskConfig:
     return DynamicRiskConfig(**REPORTED_DYNAMIC_CONFIG)
+
+
+def _dynamic_risk(dynamic_config: Any) -> Any:
+    """The dynamic configuration for ``make_config``: the default one for None, and a
+    :class:`DynamicRiskConfig` for the notebook's own ``M11DynamicRiskConfig`` (a
+    dataclass with the same fields), which the archived evaluation code passes."""
+    if dynamic_config is None:
+        return DynamicRiskConfig()
+    if is_dataclass(dynamic_config) and not isinstance(dynamic_config, (type, DynamicRiskConfig)):
+        return DynamicRiskConfig(**asdict(dynamic_config))
+    return dynamic_config
 
 
 def _check_obstacles(n_obstacles: int) -> None:
@@ -144,7 +155,7 @@ def make_ruscuav_env_m11_dynamic_mode(world, stage="C", mode="strict_eval", risk
     stage, mode = _stage_mode(stage, mode)
     cfg = make_config(
         "DYN-RISK-RL" if reward_only_obs else "RISK+OBS-RL", stage=stage, mode=mode, risk_profile=risk_profile,
-        dynamic_risk=dynamic_config if dynamic_config is not None else DynamicRiskConfig(),
+        dynamic_risk=_dynamic_risk(dynamic_config),
     )
     return _finish(RuscuavEnv(world, cfg), seed)
 
@@ -156,7 +167,7 @@ def make_ruscuav_env_m11c_dynamic_obs_mode(world, stage="C", mode="strict_eval",
     stage, mode = _stage_mode(stage, mode)
     cfg = make_config(
         "DYN-OBS-RL", stage=stage, mode=mode, risk_profile=risk_profile,
-        dynamic_risk=dynamic_config if dynamic_config is not None else DynamicRiskConfig(),
+        dynamic_risk=_dynamic_risk(dynamic_config),
     )
     return _finish(RuscuavEnv(world, cfg), seed)
 

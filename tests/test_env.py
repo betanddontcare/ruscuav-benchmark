@@ -9,7 +9,7 @@ differently on other CPUs; set RUSCUAV_EXACT_GOLDEN=1 to require identical bits
 step-by-step comparison is scripts/migration/env_parity.py.
 """
 
-from dataclasses import replace
+from dataclasses import field, fields, make_dataclass, replace
 from pathlib import Path
 import csv
 import json
@@ -36,6 +36,7 @@ from ruscuav_benchmark.env import (  # noqa: E402
     make_env,
 )
 from ruscuav_benchmark.env import legacy_factories  # noqa: E402
+from ruscuav_benchmark.env.dynamic_risk import DynamicRiskConfig  # noqa: E402
 
 WORLD_PATH = REPO / "worlds" / "synthetic" / "AOI_SYNTH_000" / "urban_world_layers.npz"
 GOLDEN_PATH = REPO / "tests" / "data" / "env_golden_AOI_SYNTH_000.json"
@@ -201,3 +202,16 @@ def test_legacy_factories_build_the_matching_presets(world):
         legacy_factories.reported_dynamic_config()
     with pytest.raises(ValueError, match="obstacles"):
         legacy_factories.make_ruscuav_env_m4_mode(world, n_obstacles=3)
+
+
+def test_legacy_dynamic_factories_take_the_notebook_configuration(world):
+    # the archived evaluation code passes its own M11DynamicRiskConfig, a dataclass with the same fields
+    notebook_class = make_dataclass("M11DynamicRiskConfig",
+                                    [(f.name, f.type, field(default=f.default)) for f in fields(DynamicRiskConfig)])
+    notebook_config = notebook_class(**legacy_factories.REPORTED_DYNAMIC_CONFIG)
+    for factory in (legacy_factories.make_ruscuav_env_m11_dynamic_mode,
+                    legacy_factories.make_ruscuav_env_m11c_dynamic_obs_mode):
+        dynamic = factory(world, dynamic_config=notebook_config).config.dynamic_risk
+        assert type(dynamic) is DynamicRiskConfig and dynamic == legacy_factories.reported_dynamic_config()
+        assert factory(world).config.dynamic_risk == DynamicRiskConfig()
+        assert factory(world, dynamic_config=legacy_factories.REPORTED_DYNAMIC_CONFIG).config.dynamic_risk == dynamic

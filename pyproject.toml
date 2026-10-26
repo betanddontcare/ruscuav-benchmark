@@ -28,6 +28,14 @@ env = [
   "gymnasium>=0.29",
   "scipy>=1.10"
 ]
+# PPO policies (ruscuav_benchmark.policies): loading the archived checkpoints and training.
+# The checkpoints were saved with Stable-Baselines3 2.8/2.9 and Gymnasium 1.2/1.3.
+rl = [
+  "numpy>=2.0",
+  "gymnasium>=1.2",
+  "scipy>=1.10",
+  "stable-baselines3>=2.8"
+]
 
 [project.urls]
 Homepage = "https://zenodo.org/"

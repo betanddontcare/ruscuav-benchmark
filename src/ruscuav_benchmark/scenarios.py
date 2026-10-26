@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import csv
+import warnings
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -46,6 +47,54 @@ def scenario_seed(row: Dict[str, Any]) -> Optional[int]:
     """Episode seed of a scenario row (None if the row has none)."""
     value = row.get("seed")
     return None if value in (None, "") else int(value)
+
+
+#: (seed, reset options or None) of one evaluation episode.
+Episode = Tuple[Optional[int], Optional[Dict[str, Any]]]
+
+
+def missions_from_csv(path: Union[str, Path], world: Optional[UrbanWorldLayers] = None,
+                      seed0: int = 5000) -> List[Episode]:
+    """Episodes of a scenario CSV (rows of ``world`` only, when given).
+
+    The episode seed is the row's ``seed``, or ``seed0`` plus the row index when the
+    file has none. The seed sets the environment's random state and the dynamic risk
+    field, so rows that share a seed (files written with one generation seed) share
+    one dynamic field; a warning says so.
+    """
+    rows = read_scenarios(path, world_id=None if world is None else world.aoi_id)
+    episodes = []
+    for index, row in enumerate(rows):
+        seed = scenario_seed(row)
+        episodes.append((seed0 + index if seed is None else seed, mission_from_row(row)))
+    seeds = [seed for seed, _ in episodes]
+    if len(set(seeds)) < len(seeds):
+        warnings.warn(f"{path}: {len(seeds) - len(set(seeds))} rows repeat a seed; episodes with the same seed "
+                      "have the same random state and dynamic risk field", stacklevel=2)
+    return episodes
+
+
+def episode_list(seeds: Optional[Iterable[int]], missions: Optional[Sequence[Episode]],
+                 n_episodes: Optional[int], seed0: int) -> List[Episode]:
+    """The episodes of an evaluation: ``missions`` (``(seed, reset options)``),
+    ``seeds``, or ``n_episodes`` seeds from ``seed0`` (200 by default); ``n_episodes``
+    also limits ``missions`` and ``seeds``."""
+    if seeds is not None and missions is not None:
+        raise ValueError("give seeds or missions, not both")
+    if n_episodes is not None and int(n_episodes) < 1:
+        raise ValueError(f"n_episodes must be at least 1, got {n_episodes}")
+    if missions is not None:
+        episodes = [(None if s is None else int(s), o) for s, o in missions]
+    elif seeds is not None:
+        episodes = [(int(s), None) for s in seeds]
+    else:
+        episodes = [(int(seed0) + i, None) for i in range(200 if n_episodes is None else int(n_episodes))]
+    if missions is not None or seeds is not None:
+        if n_episodes is not None:
+            episodes = episodes[: int(n_episodes)]
+    if not episodes:
+        raise ValueError("no episodes to evaluate")
+    return episodes
 
 
 def sample_static_scenarios(

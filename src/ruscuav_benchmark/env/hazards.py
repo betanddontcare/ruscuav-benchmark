@@ -63,6 +63,34 @@ class UrbanHazardModel:
                 return True
         return False
 
+    def unsafe_at_altitude(self, xs: np.ndarray, ys: np.ndarray, z_abs: float,
+                           include_clearance_violation: bool = True) -> np.ndarray:
+        """:meth:`is_unsafe` for many points at one altitude, with the same arithmetic.
+
+        Point k is ``(xs[k], ys[k], z_abs)`` as :meth:`is_unsafe` receives it after
+        ``float()``: ``xs`` and ``ys`` hold those values (they are taken as float64)
+        and contain no NaN, and ``z_abs`` is a Python float.
+        """
+        rm = self.risk_model
+        p = rm.profile
+        world = self.world
+        yi, xi = rm.cells_from_xy(xs, ys)
+        building = world.building_mask[yi, xi] > 0.5
+        canopy = world.canopy_mask[yi, xi] > 0.5
+        terrain_clearance = z_abs - world.terrain_z[yi, xi].astype(np.float64)  # also the height above ground
+        building_clearance = z_abs - world.building_roof_z[yi, xi].astype(np.float64)
+        canopy_clearance = z_abs - world.canopy_top_z[yi, xi].astype(np.float64)
+        unsafe = terrain_clearance <= p.terrain_min_clearance_m
+        unsafe |= building & (building_clearance <= 0.0)
+        unsafe |= canopy & (canopy_clearance <= 0.0)
+        if rm.hard_sensitive_zones:
+            sensitive = world.sensitive_mask[yi, xi] > 0.5
+            unsafe |= sensitive & (terrain_clearance < p.sensitive_min_overflight_agl_m)
+        if include_clearance_violation:
+            unsafe |= building & (building_clearance < p.building_min_clearance_m)
+            unsafe |= canopy & (canopy_clearance < p.canopy_min_clearance_m)
+        return unsafe
+
     def signed_clearance_m(self, pos) -> float:
         """Signed-clearance proxy (metres; negative inside a hazard).
 

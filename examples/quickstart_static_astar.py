@@ -6,7 +6,7 @@ Run from the repository root after ``pip install -e ".[env]"``::
 
 The script flies STATIC_Astar on the first 3 recorded canonical-world missions
 (``scenarios/canonical/AOI_SYNTH_000_seed5000_n200.csv``) in the primary no-terminal
-regime, which takes about a minute, and writes the per-episode CSV and the summary to
+regime, which takes a few seconds, and writes the per-episode CSV and the summary to
 ``runs/quickstart_static_astar/``. The rows are the first rows of the archived
 STATIC_Astar evaluation; see docs/PLANNERS.md for the other planners and for your
 own worlds.

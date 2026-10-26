@@ -1,6 +1,7 @@
-"""``ruscuav-evaluate``: the same as ``ruscuav evaluate`` (planner evaluation).
+"""``ruscuav-evaluate``: the same as ``ruscuav evaluate`` (planner or policy evaluation).
 
-The planners and their evaluation are in :mod:`ruscuav_benchmark.planners`.
+The planners and their evaluation are in :mod:`ruscuav_benchmark.planners`, the
+policies in :mod:`ruscuav_benchmark.policies`.
 """
 
 from __future__ import annotations

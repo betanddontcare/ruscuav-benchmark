@@ -1,11 +1,24 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, Tuple
 
 import numpy as np
 
 from .world import UrbanWorldLayers
+
+
+def _floor_index(value: float, upper: int) -> int:
+    """``int(np.clip(np.floor(value), 0, upper))`` for a Python float, without the
+    NumPy scalar overhead (the lookups below run millions of times per evaluation)."""
+    if value != value:
+        raise ValueError("cannot convert float NaN to integer")
+    if value <= 0.0:
+        return 0
+    if value >= upper:
+        return upper
+    return int(math.floor(value))
 
 
 @dataclass(frozen=True)
@@ -79,8 +92,18 @@ class UrbanRiskModel:
 
     def _ij_from_xy(self, x: float, y: float) -> tuple[int, int]:
         res = float(self.world.resolution_m)
-        xi = int(np.clip(np.floor(float(x) / res), 0, self.world.width - 1))
-        yi = int(np.clip(np.floor(float(y) / res), 0, self.world.height - 1))
+        xi = _floor_index(float(x) / res, self.world.width - 1)
+        yi = _floor_index(float(y) / res, self.world.height - 1)
+        return yi, xi
+
+    def cells_from_xy(self, xs: np.ndarray, ys: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """:meth:`_ij_from_xy` for arrays of coordinates without NaN: (rows, columns).
+        The coordinates are taken as float64, as ``float(x)`` does."""
+        res = float(self.world.resolution_m)
+        xs = np.asarray(xs, dtype=np.float64)
+        ys = np.asarray(ys, dtype=np.float64)
+        xi = np.clip(np.floor(xs / res), 0, self.world.width - 1).astype(np.intp)
+        yi = np.clip(np.floor(ys / res), 0, self.world.height - 1).astype(np.intp)
         return yi, xi
 
     def terrain_at(self, x: float, y: float) -> float:
