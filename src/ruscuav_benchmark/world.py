@@ -227,7 +227,10 @@ class UrbanWorldLayers:
         return d
 
     def save_npz(self, path: str | Path) -> str:
+        """Write the world NPZ; returns the file's path (NumPy adds ``.npz`` if it is missing)."""
         path = Path(path)
+        if not path.name.endswith(".npz"):
+            path = path.with_name(path.name + ".npz")
         path.parent.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(path, **self.to_npz_dict())
         return str(path)
@@ -398,6 +401,12 @@ def summarize_world_layers(world: UrbanWorldLayers) -> Dict[str, Any]:
 
 
 def run_world_gate_checks(world: UrbanWorldLayers, risk_profile: str = "balanced") -> Dict[str, Any]:
+    """The notebook's world gate (M1), which its synthetic worlds pass: mutually
+    exclusive classes (no cell two of building, road, sidewalk, green; canopy inside
+    green areas) and height sanity. Worlds built from OpenStreetMap, the paper's
+    Vienna world among them, have overlapping classes and fail the first part
+    (``overlap["passed"]``); ``ruscuav validate`` accepts them, as the environment
+    counts a cell towards each of its classes."""
     overlap = diagnose_world_layer_overlaps(world)
     height = diagnose_world_height_sanity(world)
     risk = compute_base_semantic_risk_map(world, risk_profile)

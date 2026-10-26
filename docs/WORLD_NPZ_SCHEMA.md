@@ -64,17 +64,29 @@ Errors (the world cannot be used):
 - masks outside [0, 1]; `bbox` or `resolution_m` invalid or inconsistent with the grid;
 - derived layers that disagree with their base layers by more than 1 mm
   (`height_above_ground`, `building_roof_z`, `canopy_top_z`); `canopy_density` outside [0, 1];
-- overlapping classes that must be disjoint: building, road, sidewalk and green are
-  mutually exclusive, and canopy must lie inside green areas;
 - height sanity: surface below terrain, negative heights, buildings or canopy
-  without height.
+  without height;
+- terrain whose lowest point is above 148 m: the environment flies below 150 m
+  (`dynamics.z_max_m`) and at least 2 m above the ground, so terrain heights should
+  be relative to the area.
 
 Warnings (legal but worth checking):
 
 - no `schema_version`; unknown extra keys;
 - non-binary masks; `canopy_density` set outside canopy;
-- `surface_z` different from max(terrain, roofs, canopy tops), which is expected only
-  for DSM-based surfaces;
+- overlapping classes: cells that are two of building, road, sidewalk and green, and
+  canopy outside green areas. A cell's exposure counts towards each of its classes,
+  so overlaps are legal. Worlds built from OpenStreetMap (docs/BUILDING_WORLDS.md)
+  have them, roads under building passages and roads and footways through parks: the
+  paper's Vienna world has 2,338 building and road cells, 25,109 road and green cells
+  and 43,123 sidewalk and green cells; the synthetic worlds have none. The notebook's
+  gate checks of its synthetic worlds (`run_world_gate_checks`,
+  `scripts/run_gate_checks.py`) want exclusive classes and so report such worlds;
+- `surface_z` different from max(terrain, roofs, canopy tops), which is expected for
+  surfaces from a DSM and for worlds built from OpenStreetMap where a building
+  replaced canopy;
+- terrain higher than 120 m: the environment cruises 30 m above the terrain, below
+  150 m;
 - a `bbox` starting at (0, 0) combined with an `EPSG:` CRS label;
 - grids other than 1000 × 1000 at 1 m, on which the environment and planners are
   not yet validated.

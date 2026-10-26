@@ -37,6 +37,17 @@ rl = [
   "scipy>=1.10",
   "stable-baselines3>=2.8"
 ]
+# Worlds from OpenStreetMap (ruscuav_benchmark.gis, `ruscuav build-aoi`). The paper's
+# worlds were built with OSMnx 2.1, GeoPandas 1.1, Shapely 2.1, Rasterio 1.5 and
+# PyProj 3.7 (requirements-reproducibility.txt).
+gis = [
+  "osmnx>=2.0",
+  "geopandas>=1.0",
+  "shapely>=2.0",
+  "rasterio>=1.3",
+  "pyproj>=3.6",
+  "affine>=2.3"
+]
 
 [project.urls]
 Homepage = "https://zenodo.org/"

@@ -16,3 +16,11 @@ This release includes real-GIS scripts, query/tag logic, AOI metadata, benchmark
 Vienna missions. They were sampled in the processed world and checked against its
 layers, so their JSON files carry the attribution above. The worlds themselves
 remain excluded.
+
+## Worlds you build
+
+`ruscuav build-aoi` (docs/BUILDING_WORLDS.md) builds worlds from OpenStreetMap
+data. Such a world is a database derived from OpenStreetMap: its metadata
+(`meta_json`) carries the attribution above and records the data it was built from.
+Keep the attribution when you publish results, figures or maps made from it, and
+share the world itself only under the ODbL.

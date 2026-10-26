@@ -30,6 +30,11 @@ MASK_KEYS = ("building_mask", "road_mask", "sidewalk_mask", "green_mask", "canop
 VALIDATED_SHAPE = (1000, 1000)
 VALIDATED_RESOLUTION_M = 1.0
 HEIGHT_TOLERANCE_M = 1e-3
+#: The environment's workspace ceiling, and its lowest and cruise heights above the
+#: terrain (m): the defaults of RuscuavEnv (``DynamicsConfig``), which protocols keep.
+WORKSPACE_CEILING_M = 150.0
+MIN_AGL_M = 2.0
+CRUISE_AGL_M = 30.0
 
 
 @dataclass
@@ -93,7 +98,22 @@ def _check_derived(arrays: Dict[str, np.ndarray], report: ValidationReport) -> N
     if surface_diff > HEIGHT_TOLERANCE_M:
         report.warnings.append(
             f"surface_z differs from max(terrain, roofs, canopy tops) by up to {surface_diff:.4g} m "
-            "(expected only for DSM-based surfaces)"
+            "(expected for surfaces from a DSM, and in worlds built from OpenStreetMap where a building "
+            "replaced canopy)"
+        )
+    lowest = float(tz.min()) if tz.size else 0.0
+    highest = float(tz.max()) if tz.size else 0.0
+    if lowest + MIN_AGL_M > WORKSPACE_CEILING_M:
+        report.errors.append(
+            f"the terrain's lowest point is {lowest:.4g} m: the environment cannot fly {MIN_AGL_M:g} m above it "
+            f"below its ceiling of {WORKSPACE_CEILING_M:g} m (dynamics.z_max_m); give terrain heights relative to "
+            "the area"
+        )
+    elif highest + CRUISE_AGL_M > WORKSPACE_CEILING_M:
+        report.warnings.append(
+            f"the terrain reaches {highest:.4g} m; the environment flies below {WORKSPACE_CEILING_M:g} m "
+            f"(dynamics.z_max_m), cruising {CRUISE_AGL_M:g} m above the terrain: give terrain heights relative "
+            "to the area"
         )
 
 
@@ -269,17 +289,20 @@ def _validate(path: Path, report: ValidationReport) -> None:
         return
     _check_derived(arrays, report)
 
-    # Benchmark gate checks: semantic mask exclusivity and height sanity
+    # Benchmark gate checks: semantic classes and height sanity. Overlapping classes are
+    # legal (the exposure of a cell counts towards each of its classes); worlds built
+    # from OpenStreetMap, the paper's Vienna and Warsaw worlds among them, have roads
+    # under building passages and roads and footways through green areas.
     world = UrbanWorldLayers.load_npz(path)
     gates = run_world_gate_checks(world)
     for name, row in gates["overlap"]["checks"].items():
         if not (row["hard_zero"] and row["pixels"] > 0):
             continue
         if name == "canopy_outside_green":
-            report.errors.append(f"canopy must lie inside green areas: {row['pixels']} canopy cells are outside green_mask")
+            report.warnings.append(f"{row['pixels']} canopy cells lie outside green_mask")
         else:
             a, b = name.split("__")
-            report.errors.append(f"masks overlap: {a} and {b} share {row['pixels']} cells (must be disjoint)")
+            report.warnings.append(f"masks overlap: {a} and {b} share {row['pixels']} cells, which count as both")
     for name, count in gates["height"]["checks"].items():
         if count:
             report.errors.append(f"height check failed: {name.replace('_', ' ')} ({count})")

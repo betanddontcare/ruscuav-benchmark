@@ -134,6 +134,29 @@
   CSV reader and the trajectory scoring against the archive, and `shield_steps.py`
   replays what the geometric shield did on given steps; `scripts/make_protocols.py`
   writes the protocol files.
+- New `ruscuav_benchmark.gis` (extra `gis`: OSMnx, GeoPandas, Shapely, Rasterio, PyProj)
+  and `ruscuav build-aoi`: worlds from OpenStreetMap with the pipeline of the paper's
+  real-GIS worlds (the notebook's `build_real_world_for_aoi` and its footway-only
+  variant), from an OSM XML file or the Overpass API (`--osm-date` for the data of a
+  date, `--cache` to keep the responses), with an optional DEM and DSM, provenance in
+  `meta_json`, validation and an optional protocol (docs/BUILDING_WORLDS.md). OSM
+  files that cover none of the area are refused; files that cover part of it or lack
+  members of multipolygons, areas without features and DEMs with gaps give warnings.
+  On the same data, on the notebook's 1 km grid at 1 m and with its terrain it gives
+  the notebook's worlds bit for bit (`scripts/migration/gis_parity.py`), and the
+  archived Vienna world keeps all of its rules (`check_builder_rules`).
+  `scripts/build_real_gis_world.py`, which could not run outside the notebook, now
+  runs `ruscuav build-aoi`.
+- `ruscuav validate` reports overlapping classes (building, road, sidewalk, green;
+  canopy outside green areas) as warnings instead of errors: a cell's exposure counts
+  towards each of its classes, and worlds built from OpenStreetMap, the paper's
+  Vienna world among them, have such cells. Terrain whose lowest point is above
+  148 m is an error, as `RuscuavEnv` refuses it, and terrain above 120 m, which leaves
+  no room to cruise below the 150 m ceiling, a warning. `scripts/run_gate_checks.py`
+  prints OVERLAP for worlds whose classes overlap (the notebook's gate of its
+  synthetic worlds wants them exclusive).
+- `UrbanWorldLayers.save_npz` returns the path of the file it wrote, with the `.npz`
+  NumPy adds to a name without it.
 
 ## 2.0.0 — 2026-07-24
 

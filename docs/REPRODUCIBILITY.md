@@ -596,6 +596,69 @@ be rebuilt from the base world file, which reproduces only one of four archived
 planner episodes. The Warsaw missions can be recorded once a copy of the
 footway-only world is found.
 
+## Building worlds from OpenStreetMap
+
+`ruscuav_benchmark.gis` and `ruscuav build-aoi` (docs/BUILDING_WORLDS.md) port the
+notebook's `build_real_world_for_aoi`, which built the Vienna world, and the
+footway-only variant of its Vienna cells. `scripts/migration/gis_parity.py` builds
+each area with the notebook's code (run by `ruscuav_benchmark.legacy`) and with the
+package from the same OSM XML file and compares the two worlds: every layer, the
+identifiers and the area's UTM bounds, for both sidewalk variants. The notebook
+downloaded its features with OSMnx; in the comparison its download function reads
+them from the file with the OSMnx function the package uses (`features_from_xml`,
+filtered by the area's bounding box as the download was). For layers without
+features in the area (none in its bounding box, or none left after clipping to the
+square), the notebook's empty-layer branches (a GeoDataFrame with the CRS name
+"LOCAL_RUSCUAV", which GeoPandas 1 refuses) are given an empty frame without CRS.
+
+| Area | OpenStreetMap data | Share of the area in the file | Features in the area (buildings, highways, green, sensitive) | Terrain | Worlds identical |
+|---|---|---|---|---|---|
+| Vienna Prater (the paper's area) | synthetic town | 100% | 128, 32, 20, 12 | fallback | 2 of 2 |
+| Warsaw centre (the paper's area) | synthetic town | 100% | 127, 32, 20, 12 | fallback | 2 of 2 |
+| Cape Town (UTM zone 34 south) | synthetic town | 100% | 137, 34, 20, 12 | DEM (WGS 84) and DSM (UTM) | 2 of 2 |
+| Vienna Prater | green areas and sensitive facilities only between the bounding box and the square | 100% | 1, 1, 0, 0 | fallback | 2 of 2 |
+| Germany, 48.136 N 10.0695 E | OSMnx test extract | 4.7% | 32, 15, 0, 0 | fallback | 2 of 2 |
+| West Oakland | OSMnx test extract (`.osm.bz2`) | 12% | 23, 38, 2, 2 | fallback | 2 of 2 |
+| Vaduz | Liechtenstein, 2013 | 100% | 7, 174, 2, 2 | fallback | 2 of 2 |
+| Schaan | Liechtenstein, 2013 | 100% | 192, 188, 3, 4 | fallback | 2 of 2 |
+
+With the GIS libraries of the archived Colab environment (`requirements-reproducibility.txt`:
+OSMnx 2.1.1, GeoPandas 1.1.3, Shapely 2.1.2 with GEOS 3.13.1, Rasterio 1.5.0 with
+GDAL 3.12.1, PyProj 3.7.2 with PROJ 9.5.1, NumPy 2.0.2), every layer of every world
+is the notebook's, bit for bit, and so are the identifiers and the UTM bounds; the
+DEM and DSM of the Cape Town case are read with the notebook's absolute heights
+(`terrain_datum="absolute"`). The comparison holds on the notebook's grid (1 km at
+1 m) and with its terrain; relative DEM heights (the package's default) and other
+grids are the package's own. The OpenStreetMap files are test data of OSMnx (two small areas,
+which cover only part of a 1 km square) and the 2013 Liechtenstein extract of
+osm2pgsql's tests, converted to XML; they are not in the repository. With the newest
+versions at the time of writing (OSMnx 2.1.1, GeoPandas 1.2.0, Shapely 2.2.0 with
+GEOS 3.14.1, Rasterio 1.5.2 with GDAL 3.12.2, PyProj 3.8.0 with PROJ 9.8.1, NumPy
+2.5.4) the package builds the same worlds of the synthetic Vienna town, West Oakland
+and Schaan, bit for bit.
+
+The archived Vienna world was built this way: it keeps every rule of the builder
+(`check_builder_rules`: no sidewalk on roads or buildings, no green area or canopy
+under buildings, canopy inside green areas, building heights of 3–150 m and canopy
+heights of the rules (Vienna's are 6, 12 and 18 m) only on their masks, canopy
+density 0.75, roofs, canopy tops and height above ground derived from their layers,
+the surface the highest of terrain, roofs and canopy tops outside buildings), its
+terrain is the fallback surface bit for bit, and the UTM bounds and bounding box of
+`--preset vienna` are those of its archived metadata (`worlds/real_gis/metadata/`).
+Its 77 building cells where the surface is 12 m above the terrain, higher than the
+roof, are canopy of a park that the buildings replaced after the surface was
+computed, as in the builder.
+
+```bash
+python scripts/migration/gis_parity.py --archive /path/to/RUSCUAV-v2.0.0 --work runs/gis_parity \
+    --vienna /path/to/vienna_prater_leopoldstadt_osm_1km_v1_footway_only_urban_world_layers.npz \
+    --osm 37.807645,-122.300415=/path/to/West-Oakland.osm.bz2
+```
+
+`tests/test_gis.py` builds worlds from synthetic extracts (`tests/osm_fixtures.py`),
+compares two of them with the notebook's builder when `RUSCUAV_ARCHIVE` is set and
+checks the archived Vienna world's rules when `RUSCUAV_VIENNA_WORLD` is set.
+
 ## Full re-evaluation in Colab (original route)
 
 1. Create an environment matching `requirements-reproducibility.txt` and the archived `pip_freeze_colab.txt`.

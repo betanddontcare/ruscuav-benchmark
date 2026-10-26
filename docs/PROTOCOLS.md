@@ -93,6 +93,10 @@ Flying the paper's planners under their protocols gives the archived rows
 ## Your own world
 
 ```bash
+# a world built from OpenStreetMap, with its protocol (docs/BUILDING_WORLDS.md)
+ruscuav build-aoi --center 50.0614,19.9366 --aoi-id my_city --osm my_city.osm --output my_city.npz \
+    --protocol my-city.json
+# or any world NPZ
 ruscuav validate my_city.npz
 ruscuav protocol create --world my_city.npz --name my-city --output my-city.json
 ruscuav protocol create --world my_city.npz --name my-city-dynamic --dynamic --output my-city-dynamic.json

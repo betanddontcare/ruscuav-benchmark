@@ -6,12 +6,14 @@ Commands:
              (same as ``ruscuav-evaluate``)
   score      the paper's tables and paired tests for per-episode results
   protocol   list, show or create evaluation protocols
+  build-aoi  build a world NPZ from OpenStreetMap data
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from typing import Any, Dict, List, Optional
 
@@ -413,6 +415,119 @@ def _cmd_score(args: argparse.Namespace) -> int:
     return 0
 
 
+def _parse_center(text: str):
+    parts = [p.strip() for p in str(text).split(",")]
+    try:
+        lat, lon = (float(p) for p in parts)
+    except ValueError:
+        raise ValueError(f"--center {text!r}: expected LAT,LON in degrees, e.g. 48.2152,16.3975") from None
+    return lat, lon
+
+
+def _cmd_build_aoi(args: argparse.Namespace) -> int:
+    import os
+    from pathlib import Path
+
+    from .validate import validate_world_npz
+
+    aoi = None
+    try:
+        from .gis import PAPER_AOIS, Aoi, build_world
+
+        preset = dict(PAPER_AOIS[args.preset]) if args.preset else {}
+        if args.center is not None:
+            lat, lon = _parse_center(args.center)
+        elif preset:
+            lat, lon = preset["center_lat"], preset["center_lon"]
+        else:
+            raise ValueError("give --center LAT,LON or --preset")
+        aoi = Aoi(lat, lon, args.size if args.size is not None else preset.get("size_m", 1000.0),
+                  args.resolution if args.resolution is not None else preset.get("resolution_m", 1.0))
+        if args.bbox_only:
+            from .gis import EXTRACT_MARGIN_M, aoi_geometry, extract_bbox
+
+            geo = aoi_geometry(aoi)
+            west, south, east, north = extract_bbox(aoi)
+            print(json.dumps({"center": [aoi.center_lat, aoi.center_lon], "size_m": aoi.size_m,
+                              "resolution_m": aoi.resolution_m, **geo.to_dict(),
+                              "extract_margin_m": EXTRACT_MARGIN_M, "extract_bbox": {
+                                  "north": north, "south": south, "east": east, "west": west},
+                              "osmium_extract": f"osmium extract -s smart -b {west!r},{south!r},{east!r},{north!r} "
+                                                "REGION.osm.pbf -o area.osm"}, indent=2))
+            return 0
+        if args.output is None:
+            raise ValueError("give --output, the world file to write")
+        moved = preset and any(v is not None for v in (args.center, args.size, args.resolution))
+        if moved and not args.aoi_id:
+            raise ValueError("--center, --size and --resolution change the area of --preset: give --aoi-id, the "
+                             "world's identifier (the preset's is the paper's area)")
+        aoi_id = args.aoi_id or preset.get("aoi_id")
+        if not aoi_id:
+            raise ValueError("give --aoi-id, the world's identifier")
+        if (args.osm is None) == (not args.download):
+            raise ValueError("give the OpenStreetMap data: --osm FILE (OSM XML) or --download")
+        if not args.download and (args.osm_date or args.cache):
+            raise ValueError("--osm-date and --cache apply to --download")
+        if args.dem is None and args.terrain_datum is not None:
+            raise ValueError("--terrain-datum applies to --dem")
+        if args.protocol is not None and args.episodes < 1:
+            raise ValueError(f"--episodes must be at least 1, got {args.episodes}")
+        if args.protocol is not None and args.seed0 < 0:
+            raise ValueError(f"--seed0 must not be negative, got {args.seed0}")
+        if args.protocol is not None:  # the "env" extra, before the world is built
+            import importlib.util
+
+            for module in ("gymnasium", "scipy"):
+                if importlib.util.find_spec(module) is None:
+                    raise ModuleNotFoundError(f"No module named {module!r}")
+        out = Path(args.output)
+        if not out.name.endswith(".npz"):  # as numpy.savez names the file
+            out = out.with_name(out.name + ".npz")
+        built = build_world(aoi, aoi_id, osm_file=args.osm, download=args.download, date=args.osm_date,
+                            cache_folder=args.cache, dem=args.dem, dsm=args.dsm,
+                            terrain_datum=args.terrain_datum or "relative", sidewalks=args.sidewalks)
+        out = Path(built.world.save_npz(out))
+        report = validate_world_npz(out)
+        meta = built.meta
+        result = {
+            "aoi_id": built.world.aoi_id, "file": str(out), "layers_sha256": built.world.layers_sha256(),
+            "utm_crs": built.geometry.utm_crs, "wgs_bbox": built.geometry.wgs_bbox,
+            "features_in_area": meta["osm"]["features_in_area"], "terrain": meta["terrain"]["source"],
+            "terrain_offset_m": meta["terrain"]["offset_m"],
+            "sidewalks": meta["sidewalks"], "coverage": {k: round(v, 4) for k, v in meta["coverage"].items()},
+            "valid": report.ok, "errors": report.errors, "warnings": built.warnings + report.warnings,
+        }
+        if args.protocol is not None and not report.ok:
+            result["protocol"] = None
+            print("ruscuav build-aoi: no protocol recorded, the world is invalid", file=sys.stderr)
+        elif args.protocol is not None:
+            from .protocols import make_protocol
+
+            protocol_path = Path(args.protocol)
+            try:
+                world_file = Path(os.path.relpath(out.resolve(), protocol_path.resolve().parent)).as_posix()
+            except ValueError:  # another drive (Windows)
+                world_file = out.resolve().as_posix()
+            protocol = make_protocol(built.world, args.protocol_name or built.world.aoi_id,
+                                     n_episodes=args.episodes, seed0=args.seed0, world_file=world_file)
+            protocol.save(protocol_path)
+            result["protocol"] = {"name": protocol.name, "file": str(protocol_path), "missions": protocol.n_episodes,
+                                  "digest": protocol.digest()}
+    except ModuleNotFoundError as exc:
+        print(f"ruscuav build-aoi: {exc}. Building worlds needs the \"gis\" extra (and recording a protocol the "
+              "\"env\" extra): pip install \"ruscuav-benchmark[gis,env]\"", file=sys.stderr)
+        return 2
+    except MemoryError:
+        grid = "" if aoi is None else f" for a grid of {aoi.shape[0]} x {aoi.shape[1]} cells"
+        print(f"ruscuav build-aoi: not enough memory{grid}", file=sys.stderr)
+        return 2
+    except (ValueError, OSError, KeyError, RuntimeError) as exc:
+        print(f"ruscuav build-aoi: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(result, indent=2))
+    return 0 if report.ok else 1
+
+
 def _cmd_protocol_list(args: argparse.Namespace) -> int:
     from .protocols import find_world, list_protocols, load_protocol
 
@@ -566,6 +681,45 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--output-dir", required=True, help="directory for the tables and score.json")
     p.set_defaults(func=_cmd_score)
 
+    p = sub.add_parser(
+        "build-aoi", help="build a world NPZ from OpenStreetMap data (needs the 'gis' extra)",
+        description="Build a world from the OpenStreetMap features of a square area with the pipeline of the paper's "
+                    "real-GIS worlds (buildings with heights, roads, sidewalks, green areas, canopy, sensitive zones, "
+                    "terrain), validate it and optionally record a protocol for it (docs/BUILDING_WORLDS.md). "
+                    "Worlds built from OpenStreetMap carry its licence (ODbL); see docs/OSM_ATTRIBUTION.md.",
+    )
+    p.add_argument("--preset", default=None, choices=["vienna", "warsaw"],
+                   help="the area of one of the paper's worlds (centre, size, resolution and identifier)")
+    p.add_argument("--center", default=None, metavar="LAT,LON",
+                   help="centre of the area in WGS 84 degrees, e.g. 48.2152,16.3975 or -33.9249,18.4241")
+    p.add_argument("--size", type=float, default=None, help="side of the square area in metres (default 1000)")
+    p.add_argument("--resolution", type=float, default=None, help="cell size in metres (default 1)")
+    p.add_argument("--aoi-id", default=None, help="the world's identifier (footway-only worlds get '_footway_only')")
+    p.add_argument("--osm", default=None, help="OSM XML file of the area (.osm or .osm.bz2)")
+    p.add_argument("--download", action="store_true", help="download the features from the Overpass API")
+    p.add_argument("--osm-date", default=None, metavar="ISO-TIME",
+                   help="with --download: the OpenStreetMap data as of this time, e.g. 2026-07-21T00:00:00Z")
+    p.add_argument("--cache", default=None, help="with --download: folder for the Overpass responses (read again "
+                                                   "offline by the same command)")
+    p.add_argument("--dem", default=None, help="GeoTIFF of the terrain (default: the smooth fallback surface)")
+    p.add_argument("--dsm", default=None, help="GeoTIFF of the surface (terrain, buildings and canopy), with --dem")
+    p.add_argument("--terrain-datum", default=None, choices=["relative", "absolute"],
+                   help="heights of --dem and --dsm: relative to the area's lowest whole metre (default; the "
+                        "environment flies between 0 and 150 m) or as the files have them")
+    p.add_argument("--sidewalks", default="footway-only", choices=["footway-only", "proxy"],
+                   help="sidewalk layer: the footways (default, as the paper's evaluations) or the footways and a "
+                        "4 m proxy along roads")
+    p.add_argument("--output", default=None, help="world NPZ file to write (.npz is added if missing)")
+    p.add_argument("--bbox-only", action="store_true",
+                   help="only print the area's UTM bounds and WGS 84 bounding box, and an osmium command that cuts "
+                        "an OSM extract for it")
+    p.add_argument("--protocol", default=None, help="also record a protocol for the world in this file (needs the "
+                                                    "'env' extra)")
+    p.add_argument("--protocol-name", default=None, help="the protocol's name (default: the world's identifier)")
+    p.add_argument("--episodes", type=int, default=200, help="missions of the protocol (default 200)")
+    p.add_argument("--seed0", type=int, default=5000, help="seed of the protocol's first mission (default 5000)")
+    p.set_defaults(func=_cmd_build_aoi)
+
     p = sub.add_parser("protocol", help="list, show or create evaluation protocols",
                        description="Evaluation protocols fix the world, the missions, the regime, the dynamic risk "
                                    "and the budgets that results are compared under (docs/PROTOCOLS.md).")
@@ -592,8 +746,26 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+#: Options whose value can start with a minus sign (a southern latitude), which
+#: argparse would take for an option: main() passes them as ``--center=VALUE``.
+_SIGNED_VALUE_OPTIONS = ("--center",)
+
+
+def _join_signed_values(argv: List[str]) -> List[str]:
+    out, i = [], 0
+    while i < len(argv):
+        if argv[i] in _SIGNED_VALUE_OPTIONS and i + 1 < len(argv) and re.match(r"-\.?\d", argv[i + 1]):
+            out.append(f"{argv[i]}={argv[i + 1]}")
+            i += 2
+        else:
+            out.append(argv[i])
+            i += 1
+    return out
+
+
 def main(argv: Optional[List[str]] = None) -> int:
-    args = build_parser().parse_args(argv)
+    argv = sys.argv[1:] if argv is None else list(argv)
+    args = build_parser().parse_args(_join_signed_values(argv))
     return int(args.func(args))
 
 

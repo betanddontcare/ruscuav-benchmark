@@ -59,11 +59,42 @@ def test_nan_rejected(tmp_path, payload):
     assert any("terrain_z contains NaN" in e for e in report.errors)
 
 
-def test_overlapping_masks_rejected(tmp_path, payload):
-    road = payload["road_mask"] > 0.5
-    payload["building_mask"] = np.where(road, 1.0, payload["building_mask"]).astype(np.float32)
+def test_overlapping_masks_are_a_warning(tmp_path, payload):
+    # worlds built from OpenStreetMap have overlapping classes, e.g. footways through parks
+    sidewalk = payload["sidewalk_mask"] > 0.5
+    assert sidewalk.any()
+    payload["green_mask"] = np.where(sidewalk, 1.0, payload["green_mask"]).astype(np.float32)
     report = validate_world_npz(write(tmp_path, payload))
-    assert any("building and road" in e for e in report.errors)
+    assert not report.errors and any("sidewalk and green share" in w for w in report.warnings)
+
+
+def test_terrain_above_the_workspace(tmp_path, payload):
+    low, high = float(payload["terrain_z"].min()), float(payload["terrain_z"].max())
+    assert high - low < 20.0
+
+    def lifted(by):
+        lifted_payload = dict(payload)
+        for key in ("terrain_z", "surface_z", "building_roof_z", "canopy_top_z"):
+            lifted_payload[key] = (payload[key] + np.float32(by)).astype(np.float32)
+        return validate_world_npz(write(tmp_path, lifted_payload, f"lifted_{by:g}.npz"))
+
+    # no room to cruise 30 m above the highest terrain: a warning
+    report = lifted(125.0 - high)
+    assert report.ok and any("give terrain heights relative" in w for w in report.warnings)
+    # nowhere to fly 2 m above the lowest terrain below the 150 m ceiling: an error, as RuscuavEnv raises
+    report = lifted(149.0 - low)
+    assert not report.ok and any("lowest point is 149 m" in e for e in report.errors)
+
+
+def test_workspace_constants_are_the_environments():
+    pytest.importorskip("gymnasium")
+    pytest.importorskip("scipy")
+    from ruscuav_benchmark import validate
+    from ruscuav_benchmark.env.config import DynamicsConfig
+
+    d = DynamicsConfig()
+    assert (validate.WORKSPACE_CEILING_M, validate.MIN_AGL_M, validate.CRUISE_AGL_M) == (
+        d.z_max_m, d.min_agl_m, d.cruise_agl_m)
 
 
 def test_inconsistent_derived_layer_rejected(tmp_path, payload):

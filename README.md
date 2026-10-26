@@ -77,7 +77,7 @@ Processed Vienna and Warsaw `UrbanWorldLayers` NPZ files are **not included** in
 - per-episode evaluation outputs and summaries;
 - OpenStreetMap attribution information.
 
-Users can regenerate the real-GIS worlds from OpenStreetMap-derived inputs using the archived pipeline. See `docs/OSM_ATTRIBUTION.md` and `worlds/real_gis/README.md`.
+Users can regenerate the real-GIS worlds from OpenStreetMap data with `ruscuav build-aoi --preset vienna` (or `warsaw`), the package's port of the archived pipeline, and build worlds of other areas the same way (`docs/BUILDING_WORLDS.md`). See `docs/OSM_ATTRIBUTION.md` and `worlds/real_gis/README.md`.
 
 ## Verification
 
