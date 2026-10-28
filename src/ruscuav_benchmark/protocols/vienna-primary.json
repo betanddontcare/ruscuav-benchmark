@@ -1,7 +1,7 @@
 {
  "format": "ruscuav-protocol-1",
  "name": "vienna-primary",
- "description": "The paper's real-GIS transfer evaluation: 200 recorded missions (seeds 7000-7199) in the processed Vienna Prater/Leopoldstadt footway-only world (OpenStreetMap data, not distributed: docs/OSM_ATTRIBUTION.md), the primary no-terminal regime (stage B, strict sensing): hard physical and low-altitude sensitive-zone constraints are active, road, pedestrian, building and dynamic budget exceedances are logged without ending the episode, and mission acceptability is computed post hoc with the paper's budgets.",
+ "description": "The paper's real-GIS transfer evaluation: 200 recorded missions (seeds 7000-7199) in the processed Vienna Prater/Leopoldstadt footway-only world (OpenStreetMap data, not distributed: docs/OSM_ATTRIBUTION.md), the primary no-terminal regime (stage B, strict sensing): hard physical and low-altitude sensitive-zone constraints are active, road, pedestrian, building and dynamic budget exceedances are logged without ending the episode, and mission acceptability is computed post hoc with the paper's budgets. The missions were sampled in that world and are derived from OpenStreetMap data: \u00a9 OpenStreetMap contributors, available under the Open Database License (ODbL 1.0).",
  "world": {
   "id": "vienna_prater_leopoldstadt_osm_1km_v1_footway_only",
   "layers_sha256": "fa99c5710f9bcb2345901f986f0e97f59bddf26d775047c8c5f2e6079f692786",

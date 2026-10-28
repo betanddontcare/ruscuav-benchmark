@@ -30,6 +30,7 @@ The benchmark is defined in `BENCHMARK_SPEC.md` (repository root). The guides:
 | [DATASET_CARD.md](DATASET_CARD.md) | the archive's intended uses and limitations |
 | [ZENODO_UPLOAD.md](ZENODO_UPLOAD.md) | how the v2.0.0 archive was uploaded to Zenodo |
 | [SOFTWAREX_CODE_METADATA.md](SOFTWAREX_CODE_METADATA.md) | the code metadata of the package, as SoftwareX asks for it |
+| [RELEASING.md](RELEASING.md) | the steps of a release: repository URL, date, checks, Zenodo DOI, PyPI |
 
 `configs/README.md` describes the configurations of the archived experiments and
 `scripts/README.md` the scripts; `CHANGELOG.md` lists the changes of each version.

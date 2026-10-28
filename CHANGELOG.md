@@ -181,9 +181,14 @@
 - `scripts/verify_paper_ready_references.py` checks the tables of the v2.0.0 archive
   (`paper_ready_v2/`, before only `paper_ready_v1/`, so that it passed without
   checking anything) and fails when it finds no tables; docs/REPRODUCIBILITY.md gives
-  its result. `make_protocols.py` and `migration/extract_legacy_env.py` take `--help`. It also notes that the equal-information table holds
-  operational-stopping evaluations, whose success rates are lower than the primary
-  ones.
+  its result and notes that the equal-information table holds operational-stopping
+  evaluations, whose success rates are lower than the primary ones.
+  `make_protocols.py` and `migration/extract_legacy_env.py` take `--help`.
+- Release metadata: `.zenodo.json` describes the package (software, 2.1.0, MIT) for
+  the archiving of GitHub releases on Zenodo; `LICENSE_DATA_CC_BY_4_0` is a licence
+  notice (it was a note for before the release); the description of the
+  `vienna-primary` protocol carries the OpenStreetMap attribution of its missions (its
+  digest and missions are unchanged); docs/RELEASING.md lists the steps of a release.
 
 ## 2.0.0 — 2026-07-24
 

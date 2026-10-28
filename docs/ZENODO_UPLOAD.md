@@ -1,5 +1,9 @@
 # Zenodo upload instructions for RUSCUAV v2.0.0
 
+These steps uploaded the v2.0.0 archive (a dataset). From 2.1.0 on, versions of the
+package are archived from GitHub releases with the metadata of `.zenodo.json`
+(docs/RELEASING.md).
+
 1. Open the existing record `10.5281/zenodo.21331403` and select **New version**.
 2. Create the new version draft. The new version is a separate record with a new version-specific DOI linked to prior versions.
 3. Upload `RUSCUAV-v2.0.0-zenodo.zip`.

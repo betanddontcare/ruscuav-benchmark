@@ -1,7 +1,7 @@
 # Code metadata
 
 The code metadata table of a SoftwareX article, for `ruscuav-benchmark` 2.1.0. The
-links of C2 and C3 are added when the repository is published.
+link of C2 is added when the repository is published (docs/RELEASING.md).
 
 | Nr. | Code metadata description | |
 |---|---|---|

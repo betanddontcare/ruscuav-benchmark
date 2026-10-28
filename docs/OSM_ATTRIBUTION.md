@@ -14,8 +14,10 @@ This release includes real-GIS scripts, query/tag logic, AOI metadata, benchmark
 
 `scenarios/real_gis/` contains the start and target points of the archived primary
 Vienna missions. They were sampled in the processed world and checked against its
-layers, so their JSON files carry the attribution above. The worlds themselves
-remain excluded.
+layers, so their JSON files carry the attribution above, and so does the description
+of the package's `vienna-primary` protocol, which holds the same missions
+(`src/ruscuav_benchmark/protocols/vienna-primary.json`). The worlds themselves remain
+excluded.
 
 ## Worlds you build
 

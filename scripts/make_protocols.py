@@ -76,7 +76,9 @@ def main() -> int:
         Protocol(name="vienna-primary",
                  description="The paper's real-GIS transfer evaluation: 200 recorded missions (seeds 7000-7199) in "
                              "the processed Vienna Prater/Leopoldstadt footway-only world (OpenStreetMap data, not "
-                             f"distributed: docs/OSM_ATTRIBUTION.md), {PRIMARY}.",
+                             f"distributed: docs/OSM_ATTRIBUTION.md), {PRIMARY}. The missions were sampled in that "
+                             "world and are derived from OpenStreetMap data: © OpenStreetMap contributors, available "
+                             "under the Open Database License (ODbL 1.0).",
                  missions=vienna, missions_source=vienna_source, world_id=vienna_meta["world_id"],
                  world_layers_sha256=vienna_meta["world_layers_sha256"],
                  world_file=vienna_meta["world_file"]["name"], world_distributed=False),
