@@ -17,6 +17,7 @@ Usage: python scripts/migration/extract_legacy_env.py OUTPUT.py
 
 from __future__ import annotations
 
+import argparse
 import ast
 import builtins
 import sys
@@ -98,7 +99,9 @@ def loaded_names(node: ast.AST) -> set[str]:
 
 
 def main() -> int:
-    output = Path(sys.argv[1])
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("output", type=Path, help="module file to write")
+    output = ap.parse_args().output
     statements = []  # (source_index, node, text)
     for index, path in enumerate(SOURCES):
         text = path.read_text(encoding="utf-8")

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,16 +8,31 @@ dynamic = ["version"]
 description = "Semantic mission-acceptability benchmark for low-altitude urban cargo-UAV navigation"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "MIT for code; CC-BY-4.0 for data and documentation"}
+# MIT for code; CC BY 4.0 for data and documentation (LICENSE_DATA_AND_ASSETS.md).
+license = "MIT AND CC-BY-4.0"
+license-files = ["LICENSE_CODE_MIT", "LICENSE_DATA_CC_BY_4_0", "LICENSE_DATA_AND_ASSETS.md", "THIRD_PARTY_NOTICES.md"]
 authors = [
   {name = "Igor Betkier"},
   {name = "Mateusz Oszczypała"}
 ]
-keywords = ["UAV", "urban navigation", "semantic risk", "mission acceptability", "benchmark"]
+keywords = ["UAV", "urban navigation", "semantic risk", "mission acceptability", "benchmark", "path planning",
+            "reinforcement learning", "OpenStreetMap"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Scientific/Engineering :: GIS",
+]
 dependencies = [
   "numpy>=1.23",
   "matplotlib>=3.7",
-  "pyyaml>=6.0",
   "scipy>=1.10"
 ]
 
@@ -48,9 +63,17 @@ gis = [
   "pyproj>=3.6",
   "affine>=2.3"
 ]
+# Everything above.
+all = ["ruscuav-benchmark[env,rl,gis]"]
+# The test suite (tests/); pandas 2 for the tests that compare the package with the
+# archive's pandas code (pandas 2.2.2).
+test = [
+  "pytest>=7.4",
+  "pandas>=2.0,<3"
+]
 
 [project.urls]
-Homepage = "https://zenodo.org/"
+"Zenodo record" = "https://doi.org/10.5281/zenodo.21331403"
 
 [project.scripts]
 ruscuav = "ruscuav_benchmark.cli:main"
@@ -67,3 +90,12 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "ruscuav_benchmark.protocols" = ["*.json"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+# verbatim exports of the research notebook and of its repair code
+extend-exclude = ["src/ruscuav_benchmark/legacy", "code"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]

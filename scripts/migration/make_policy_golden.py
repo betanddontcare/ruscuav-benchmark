@@ -57,7 +57,8 @@ CASES = [
     ("transfer_truncated", "transfer", "RISK+GREEN-RL", "primary", "seek", 5011, 5),
 ]
 
-LABELS = {("dynamic", "DYN-OBS-RL"): "RL_dynamic_obs_reward_only", ("dynamic", "DYN-RISK-RL"): "RL_reward_only_dynamic_eval",
+LABELS = {("dynamic", "DYN-OBS-RL"): "RL_dynamic_obs_reward_only",
+          ("dynamic", "DYN-RISK-RL"): "RL_reward_only_dynamic_eval",
           ("transfer", "GEO-RL"): "geometry_only", ("transfer", "RISK+GREEN-RL"): "reward_only"}
 
 

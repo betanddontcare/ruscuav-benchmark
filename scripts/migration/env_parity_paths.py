@@ -146,7 +146,8 @@ class Checks:
         for stage, seed in (("B", 5001), ("C", 5003)):
             t0 = time.time()
             ref, cand = self.m8("no_urban_lidar", stage, "fast_train")
-            self.report(f"hover until stuck, stage {stage}, seed {seed}", run(ref, cand, hover, {"seed": seed}, 310, "stuck"), t0)
+            self.report(f"hover until stuck, stage {stage}, seed {seed}",
+                        run(ref, cand, hover, {"seed": seed}, 310, "stuck"), t0)
         for seed in (5000, 5002):
             t0 = time.time()
             ref, cand = self.m8("no_urban_lidar", "B", "fast_train")
@@ -176,7 +177,8 @@ class Checks:
             ref, cand = self.m8("no_action_shield", "B", "fast_train")
             ref.urban_lidar_enabled = False
             ref.shield_stuck_patience_steps = 4
-            cand = self.rebuild(cand, lidar=LidarConfig(urban=False), episode=EpisodeConfig(shield_stuck_patience_steps=4))
+            cand = self.rebuild(cand, lidar=LidarConfig(urban=False),
+                                episode=EpisodeConfig(shield_stuck_patience_steps=4))
             with quiet():
                 ref.reset(seed=seed)
             target = ref.target_point[:2].astype(np.float64)
@@ -215,7 +217,8 @@ class Checks:
         with quiet():
             ref = self.L.make_ruscuav_env_m4_mode(self.LW, stage="C", mode="fast_train")
             cand = N.make_ruscuav_env_m4_mode(self.NW, stage="C", mode="fast_train")
-        self.report("away to the workspace boundary, LiDAR on, stage C", run(ref, cand, away, {"seed": 5008}, 120, "away"), t0)
+        self.report("away to the workspace boundary, LiDAR on, stage C",
+                    run(ref, cand, away, {"seed": 5008}, 120, "away"), t0)
 
         t0 = time.time()
         ref, cand = self.m8("no_urban_lidar", "B", "fast_train")
@@ -234,7 +237,8 @@ class Checks:
         ref = L.RealisticUrbanCargoUAVEnvM11CDynamicObs(self.LW, config=cfg, dynamic_config=L.reported_dynamic_config(),
                                                         urban_lidar_enabled=False, urban_lidar_step_m=3.0,
                                                         urban_segment_check_step_m=1.0)
-        cand = RuscuavEnv(self.NW, make_config("DYN-OBS-RL", stage="C", mode="strict_eval", lidar=LidarConfig(urban=False)))
+        cand = RuscuavEnv(self.NW, make_config("DYN-OBS-RL", stage="C", mode="strict_eval",
+                                               lidar=LidarConfig(urban=False)))
         result = run(ref, cand, uniform, {"seed": 777}, 30, "dyn0")
         for k in range(10):
             if result[0]:
@@ -247,7 +251,8 @@ class Checks:
                                         use_urban_altitude_reference=False, hard_sensitive_zones=True)
         ref = L.RealisticUrbanCargoUAVEnvM4(self.LW, config=cfg, urban_lidar_enabled=False, urban_lidar_step_m=3.0,
                                             urban_segment_check_step_m=1.0)
-        cand = RuscuavEnv(self.NW, make_config("RISK+OBS-RL", stage="B", mode="strict_eval", lidar=LidarConfig(urban=False),
+        cand = RuscuavEnv(self.NW, make_config("RISK+OBS-RL", stage="B", mode="strict_eval",
+                                               lidar=LidarConfig(urban=False),
                                                dynamics=DynamicsConfig(urban_altitude_reference=False)))
         with quiet():
             ref.reset(seed=5009)
@@ -295,17 +300,21 @@ class Checks:
             cand.current_pos = prev.copy()
             diff = (_same(a1, a2, f"state{k}.action_shield") or _same(ref_reason, reason, f"state{k}.reason")
                     or _same(p1, p2, f"state{k}.geometric_shield") or _same(bool(s1), bool(s2), f"state{k}.shielded")
-                    or _same(ref._urban_signed_clearance_proxy_m(prev), cand.hazards.signed_clearance_m(prev), f"state{k}.clearance")
-                    or _same(ref._urban_clearance_gradient_xy(prev), cand.hazards.clearance_gradient_xy(prev), f"state{k}.gradient")
+                    or _same(ref._urban_signed_clearance_proxy_m(prev), cand.hazards.signed_clearance_m(prev),
+                             f"state{k}.clearance")
+                    or _same(ref._urban_clearance_gradient_xy(prev), cand.hazards.clearance_gradient_xy(prev),
+                             f"state{k}.gradient")
                     or _same(ref._z_reference(), cand.dynamics.z_reference(prev.copy()), f"state{k}.z_reference")
-                    or _same(ref._endpoint_report(prev), endpoint_report(cand.risk_model, prev, 1.0), f"state{k}.endpoint")
+                    or _same(ref._endpoint_report(prev), endpoint_report(cand.risk_model, prev, 1.0),
+                             f"state{k}.endpoint")
                     or _same(ref._get_urban_vector_obs(),
                              cand.semantic.observation(prev, cand.target_point, cand.exposure, cand.config.mission),
                              f"state{k}.semantic_observation"))
             if diff is None and k < 25:
                 r1 = ref._compute_lidar_rays()
                 r2, m2 = cand.lidar.scan(prev.copy(), cand.target_point)
-                diff = _same(r1, r2, f"state{k}.lidar") or _same(ref.last_urban_lidar_min_norm, m2, f"state{k}.lidar_min")
+                diff = (_same(r1, r2, f"state{k}.lidar")
+                        or _same(ref.last_urban_lidar_min_norm, m2, f"state{k}.lidar_min"))
             if diff and first is None:
                 first = diff
         for x in (-1e-7, -0.5, 0, 0.0, 0.4999, 0.9999999, 1.0, 498.99999, 999, 999.0, 999.4, 999.99994, 1000, 1000.0,

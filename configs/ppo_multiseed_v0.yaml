@@ -1,5 +1,6 @@
 # RUSCUAV PPO multi-seed reproduction profile for paper headline learned baselines.
-# Requires stable-baselines3, gymnasium, torch, and the definitions module extracted from TOP_UAV.
+# The package has the same settings (configs/README.md); ruscuav_benchmark.policies.train_ppo
+# trains with them (extra "rl", docs/POLICIES.md).
 train_seeds: [1001, 2001, 3001, 4001, 5001]
 evaluation:
   seed0: 5000

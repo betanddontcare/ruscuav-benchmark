@@ -72,7 +72,8 @@ def main() -> int:
         a, b, accepted, shielded = checks[step - 1]
         shield = env.shield
         print(f"seed {seed} step {step}: shortened by the shield {shielded}; commanded {np.linalg.norm(b - a):.3f} m, "
-              f"first unsafe sample at {shield.first_hit_on_segment(a, b)}; flown {np.linalg.norm(accepted - a):.3f} m, "
+              f"first unsafe sample at {shield.first_hit_on_segment(a, b)}; "
+              f"flown {np.linalg.norm(accepted - a):.3f} m, "
               f"first unsafe sample at {shield.first_hit_on_segment(a, accepted)}")
         env.close()
     return 0

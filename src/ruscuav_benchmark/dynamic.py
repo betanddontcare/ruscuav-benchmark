@@ -1,3 +1,10 @@
+"""The early v0 proxy of dynamic ground risk: Gaussian hotspots on roads and sidewalks,
+switched on and off periodically (configs/ruscuav_v0_dynamic.yaml).
+
+The dynamic risk of the paper's evaluations is
+:mod:`ruscuav_benchmark.env.dynamic_risk` (``REPORTED_DYNAMIC_CONFIG``).
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -45,7 +52,8 @@ class DynamicRiskField:
         return float(val)
 
 
-def sample_hotspots_from_exposure_layers(world: UrbanWorldLayers, seed: int = 0, n_hotspots: int = 12) -> List[DynamicHotspot]:
+def sample_hotspots_from_exposure_layers(world: UrbanWorldLayers, seed: int = 0,
+                                         n_hotspots: int = 12) -> List[DynamicHotspot]:
     rng = np.random.default_rng(int(seed))
     exposure = (world.road_mask > 0.5) | (world.sidewalk_mask > 0.5)
     ys, xs = np.where(exposure)

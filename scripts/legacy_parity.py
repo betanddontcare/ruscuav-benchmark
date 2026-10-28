@@ -60,11 +60,14 @@ from ruscuav_benchmark.world import UrbanWorldLayers  # noqa: E402
 PLANNERS = {
     # name: (legacy evaluator, reported-config global, config class)
     "STATIC_Astar": ("evaluate_m9_static_planner_drive", "REPORTED_M9_CONFIG", "M9PlannerConfig"),
-    "LOCAL_RH_Astar": ("evaluate_m10_receding_planner_drive", "REPORTED_M10_LOCAL_CONFIG", "M10RecedingHorizonPlannerConfig"),
-    "FULL_RH_Astar": ("evaluate_m10_receding_planner_drive", "REPORTED_M10_FULL_CONFIG", "M10RecedingHorizonPlannerConfig"),
+    "LOCAL_RH_Astar": ("evaluate_m10_receding_planner_drive", "REPORTED_M10_LOCAL_CONFIG",
+                       "M10RecedingHorizonPlannerConfig"),
+    "FULL_RH_Astar": ("evaluate_m10_receding_planner_drive", "REPORTED_M10_FULL_CONFIG",
+                      "M10RecedingHorizonPlannerConfig"),
     "DYN_RH_Astar": ("evaluate_dynamic_planner_mode", "REPORTED_M11_PLANNER_CONFIG", "M10RecedingHorizonPlannerConfig"),
 }
-PLANNER_ARCHIVE = "experiments/paperA_primary_no_terminal_static_planners/eval/primary_no_terminal_{name}_n200_seed5000/primary_no_terminal_{name}_n200_seed5000_episodes.csv"
+PLANNER_ARCHIVE = ("experiments/paperA_primary_no_terminal_static_planners/eval/"
+                   "primary_no_terminal_{name}_n200_seed5000/primary_no_terminal_{name}_n200_seed5000_episodes.csv")
 DYNAMIC_PLANNER_ARCHIVE = (
     "experiments/paperA_primary_no_terminal_dynamic/eval/primary_no_terminal_dynamic_receding_Astar/"
     "primary_no_terminal_dynamic_receding_Astar_episodes.csv"
@@ -300,7 +303,8 @@ def run_real_planner(ns, name: str, n: int, seed0: int, archive: Path, given_cit
     return archived, rerun, info
 
 
-def run_ppo(ns, world, method: str, run: str, n: int, archive: Path, work: Path) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+def run_ppo(ns, world, method: str, run: str, n: int, archive: Path,
+            work: Path) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     run_dir = archive / PPO_ARCHIVE.format(method=method, run=run)
     protocol = json.loads((run_dir / "protocol.json").read_text(encoding="utf-8"))
     model_path = Path(protocol["model_path"].replace(DRIVE_LITERAL, str(archive)))
@@ -326,7 +330,8 @@ def run_ppo(ns, world, method: str, run: str, n: int, archive: Path, work: Path)
 def reward_factor_paths(archive: Path, variant: str, seed: int) -> tuple[Path, Path]:
     exp = archive / REWARD_FACTOR_ARCHIVE.format(variant=variant, seed=seed)
     prefix = REWARD_FACTOR_PREFIX.format(variant=variant, seed=seed)
-    return exp / "models" / f"ppo_ruscuav_m4_after_stage_M8_{variant}_C.zip", exp / "eval" / prefix / f"{prefix}_episodes.csv"
+    model = exp / "models" / f"ppo_ruscuav_m4_after_stage_M8_{variant}_C.zip"
+    return model, exp / "eval" / prefix / f"{prefix}_episodes.csv"
 
 
 def run_reward_factor(ns, world, variant: str, seed: int, n: int, archive: Path,
@@ -360,7 +365,8 @@ def run_policy(ns, name: str, n: int, seed0, archive: Path, work: Path, package:
     world_path = Path(str(ns.CANONICAL_WORLD_PATH)) if entry.world == "canonical" else Path(real_worlds[entry.world])
     model_path = archived_checkpoint(entry.checkpoint, archive)
     info = {"checkpoint": entry.checkpoint, "model_path": str(model_path), "model_sha256": sha256_file(model_path),
-            "world_source": str(world_path), "world_layers_sha256": UrbanWorldLayers.load_npz(world_path).layers_sha256()}
+            "world_source": str(world_path),
+            "world_layers_sha256": UrbanWorldLayers.load_npz(world_path).layers_sha256()}
     archived = read_csv(archive / entry.episodes_csv)
     tag = f"{name.replace('/', '_')}_n{n}_seed{seed0}_{int(time.time())}"
     if package:
@@ -513,7 +519,8 @@ def main() -> int:
     report = {"method": args.method, "env": env, "episodes": int(len(rerun)), "atol": args.atol,
               "rtol": args.rtol, **info, **compare_episodes(archived, rerun, args.atol, args.rtol),
               "elapsed_s": round(time.time() - t0, 1)}
-    report_path = work / f"parity_{args.method.replace(':', '_').replace('+', 'p').replace('/', '_')}_{env or 'rerun_csv'}.json"
+    method_tag = args.method.replace(':', '_').replace('+', 'p').replace('/', '_')
+    report_path = work / f"parity_{method_tag}_{env or 'rerun_csv'}.json"
     report_path.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
 
     ok = not report["mismatches"]

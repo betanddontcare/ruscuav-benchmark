@@ -46,7 +46,8 @@ def policy_action(policy: Any, obs: np.ndarray, deterministic: bool) -> Any:
 
 def fly(env: Any, policy: Any, seed: Optional[int], options: Optional[Dict[str, Any]] = None,
         deterministic: bool = True, max_steps: int = 1000,
-        on_step: Optional[Callable[[np.ndarray, Any], None]] = None) -> Tuple[Dict[str, Any], List[float], Dict[str, Any], np.ndarray, int]:
+        on_step: Optional[Callable[[np.ndarray, Any], None]] = None
+        ) -> Tuple[Dict[str, Any], List[float], Dict[str, Any], np.ndarray, int]:
     """Reset ``env`` (with ``seed`` and reset ``options``) and fly ``policy`` until the
     episode ends or ``max_steps``. Returns (reset info, rewards, final step info,
     path as float32 positions including the start, steps)."""

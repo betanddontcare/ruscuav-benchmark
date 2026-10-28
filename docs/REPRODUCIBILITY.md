@@ -7,6 +7,22 @@ python scripts/verify_v2_release.py --root .
 sha256sum -c SHA256SUMS
 ```
 
+The repository's `scripts/verify_paper_ready_references.py` checks that the files
+the paper-ready tables refer to (their columns whose names end in `_path`) are in the
+archive (the archive's own copy of the script reads only `paper_ready_v1/`, which
+v2.0.0 does not have, and passes without checking anything):
+
+```bash
+python scripts/verify_paper_ready_references.py --root /path/to/RUSCUAV-v2.0.0
+```
+
+Of the 1,816 references of the v2.0.0 tables, 271 are not in the archive: those of secondary analyses whose runs the archive does not include (the λ
+sweep of the risk-only reward, the Warsaw zero-shot PPO runs, and runs of the v1.0.0
+release under `external/RUSCUAV-v1.0.0-zenodo/`), in six secondary tables (seed
+levels of the λ sweep, of the Warsaw zero-shot runs and of the multi-world test,
+cause combinations, top causes, green-time correlation). Every file the primary
+tables refer to is present.
+
 ## Primary analysis provenance
 
 The completed one-click repair run is recorded in:
@@ -36,6 +52,23 @@ The `experiments/paperA_submission_repair_v1/primary_no_terminal/` and `experime
 ## Secondary results
 
 Operational-stopping reward-factor/shield diagnostics and the multi-world strict morphology-shift analysis are retained as secondary analyses. They are not pooled with primary no-terminal success rate.
+
+`paper_table_equal_information_learning_vs_planning.csv`, which
+docs/TABLE_FIGURE_ARTIFACT_MAP.md lists among the primary tables, holds evaluations
+in the operational-stopping regime. Its PPO rows are the five-seed runs of
+`paper_table_multiseed_rl_training_seed_ci_raw.csv` (`experiments/paperA_multiseed_rl_v1_*`),
+whose missions stop when they exceed an operational budget, and one of its three
+planner runs (`experiments/paperA_equal_information_learning_vs_planning/`) records
+such a stop too.
+Its success rates are therefore lower than those of the primary no-terminal table
+(`paper_table_primary_no_terminal_static_training_seed_ci.csv`): GEO-RL 0.783
+against 0.793, OBS-RL 0.813 against 0.825, RISK+GREEN-RL 0.835 against 0.844. Mission
+by mission, over the 1,000 missions of each method (five training seeds, missions
+5000–5199), the two evaluations differ in success only in the 10, 12 and 9 missions
+that the operational-stopping runs stopped at a budget, and they agree on the
+acceptability of every mission: an acceptable mission exceeds no budget, so both
+regimes fly it alike. The mission acceptability rates (0.710, 0.721 and 0.758) are
+therefore the same in both tables.
 
 ## Re-running archived evaluations locally (no Colab)
 

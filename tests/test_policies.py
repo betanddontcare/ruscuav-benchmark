@@ -147,7 +147,8 @@ def test_post_hoc_step_follows_the_notebook(dynamic):
     ref_summary = summarize_episode_dataframe(pd.DataFrame(rows), dynamic)
     assert list(ours_summary) == list(ref_summary)
     for key, value in ref_summary.items():
-        assert value == ours_summary[key] if isinstance(value, dict) else _same(float(value), float(ours_summary[key])), key
+        assert (value == ours_summary[key] if isinstance(value, dict)
+                else _same(float(value), float(ours_summary[key]))), key
 
 
 def test_acceptability_budgets():
@@ -161,7 +162,8 @@ def test_acceptability_budgets():
     assert not dynamic_acceptability({**row, "dynamic_cumulative_risk": 10.5})
     assert static_acceptability({**row, "dynamic_cumulative_risk": 10.5})
     d = derived_metrics({**row, "steps": 0, "path_length_xy": 0.0})
-    assert math.isnan(d["urban_risk_per_step"]) and math.isnan(d["road_fraction"]) and math.isnan(d["urban_risk_per_m_xy"])
+    assert math.isnan(d["urban_risk_per_step"]) and math.isnan(d["road_fraction"])
+    assert math.isnan(d["urban_risk_per_m_xy"])
     assert d["episode_duration_s"] == 0.0 and d["mission_acceptable_posthoc_dynamic"] is True
 
 
@@ -184,7 +186,8 @@ def _format_rows(row_format):
         row = {"episode": i, "seed": 5000 + i, "total_reward": float(rng.normal(9000, 4000)),
                "steps": int(rng.integers(50, 400)), "termination": ["success", "stuck", None][i % 3],
                "is_success": bool(i % 3 == 0), "mission_acceptable": bool(i % 6 == 0),
-               "dist_xy": float(rng.uniform(0, 90)), "cargo_health": float("nan") if i == 4 else float(rng.uniform(0.6, 1)),
+               "dist_xy": float(rng.uniform(0, 90)),
+               "cargo_health": float("nan") if i == 4 else float(rng.uniform(0.6, 1)),
                "urban_mean_risk": float(rng.uniform(0, 2)), "urban_max_risk": float(rng.uniform(0, 9)),
                "urban_cumulative_risk": float(rng.uniform(0, 80)), "road_time": float(rng.uniform(0, 30)),
                "sidewalk_time": float(rng.uniform(0, 9)), "building_time": float(rng.uniform(0, 20)),

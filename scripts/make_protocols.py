@@ -11,6 +11,7 @@ match the scenario CSVs.
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import sys
@@ -46,6 +47,7 @@ def missions(csv_name: str):
 
 
 def main() -> int:
+    argparse.ArgumentParser(description=__doc__.split("\n\n")[0]).parse_args()  # no options; --help
     canonical, canonical_source, canonical_meta = missions(CANONICAL)
     vienna, vienna_source, vienna_meta = missions(VIENNA)
     world = {"world_id": "AOI_SYNTH_000", "world_layers_sha256": canonical_meta["world_layers_sha256"],

@@ -1,0 +1,4 @@
+# The source distribution holds the package. The tests need the synthetic worlds of
+# worlds/synthetic/ (57 MB), so they stay in the repository with them.
+prune tests
+include CHANGELOG.md CITATION.cff

@@ -113,7 +113,8 @@ def build_cases(with_vienna: bool) -> List[dict]:
         case("static_RISK+GREEN", "RISK+GREEN-RL/4001", "RISK+GREEN-RL", "posthoc", (5000, 5011)),
         case("static_RISK+OBS", "RISK+OBS-RL/single", "RISK+OBS-RL", "posthoc", (5003,)),
         case("static_GEO_secondary", "GEO-RL/1001", "GEO-RL", "posthoc", (5003,), regime="secondary"),
-        case("static_RISK+GREEN_secondary", "RISK+GREEN-RL/4001", "RISK+GREEN-RL", "posthoc", (5011,), regime="secondary"),
+        case("static_RISK+GREEN_secondary", "RISK+GREEN-RL/4001", "RISK+GREEN-RL", "posthoc", (5011,),
+             regime="secondary"),
         case("dynamic_static_trained", "RISK+GREEN-RL/3001", "DYN-RISK-RL", "dynamic", (5003,)),
         case("dynamic_M11C", "DYN-OBS-RL/5001", "DYN-OBS-RL", "dynamic", (5003, 5011)),
         case("dynamic_M11B", "DYN-RISK-RL/single", "DYN-RISK-RL", "dynamic", (5011,)),
@@ -124,7 +125,8 @@ def build_cases(with_vienna: bool) -> List[dict]:
     if with_vienna:
         cases += [
             case("vienna_zero_shot", "RISK+GREEN-RL/1001", "RISK+GREEN-RL", "transfer", (7000,), world="vienna"),
-            case("vienna_short_ft", "VIENNA/RISK+GREEN-RL/short_ft", "RISK+GREEN-RL", "transfer", (7001,), world="vienna"),
+            case("vienna_short_ft", "VIENNA/RISK+GREEN-RL/short_ft", "RISK+GREEN-RL", "transfer", (7001,),
+                 world="vienna"),
             case("vienna_extended_ft", "VIENNA/RISK+GREEN-RL/extended_ft", "RISK+GREEN-RL", "transfer", (7002,),
                  world="vienna"),
             case("vienna_GEO", "GEO-RL/1001", "GEO-RL", "posthoc", (7003,), world="vienna", label="VIENNA-GEO"),
@@ -145,8 +147,9 @@ def run_reference(ns, c, model, world, seed):
     dyn_cfg = ns.reported_dynamic_config()
     if c["row_format"] == "dynamic":
         if c["method"] == "DYN-OBS-RL":
-            row, path = ns.rollout_m11c_dynamic_obs_rl_episode(model=model, world=world, seed=seed, dynamic_config=dyn_cfg,
-                                                              stage=regime.stage, mode=regime.mode)
+            row, path = ns.rollout_m11c_dynamic_obs_rl_episode(model=model, world=world, seed=seed,
+                                                              dynamic_config=dyn_cfg, stage=regime.stage,
+                                                              mode=regime.mode)
         else:
             row, path = ns.rollout_m11_dynamic_rl_episode(model=model, world=world, seed=seed, dynamic_config=dyn_cfg,
                                                           stage=regime.stage, mode=regime.mode, reward_only_obs=True)

@@ -56,7 +56,7 @@ MONITOR_INFO_KEYWORDS = (
     "urban_lidar_min_norm", "urban_signed_clearance_proxy_m", "cargo_health", "dist_xy",
 )
 
-_RL_HINT = 'training needs the "rl" extra: pip install "ruscuav-benchmark[rl]"'
+_RL_HINT = 'training needs the "rl" extra: pip install -e ".[rl]" in the repository'
 
 
 def _sb3():

@@ -206,7 +206,8 @@ def summarize_m11_dynamic_eval_df(df):
         "n_episodes": int(len(df)),
         "success_rate": float(df["is_success"].mean()),
         "mission_acceptability_rate": float(df["mission_acceptable"].mean()),
-        "static_only_acceptability_rate": float(df["mission_acceptable_static_only"].mean()) if "mission_acceptable_static_only" in df else np.nan,
+        "static_only_acceptability_rate": (float(df["mission_acceptable_static_only"].mean())
+                                           if "mission_acceptable_static_only" in df else np.nan),
 
         "mean_reward": float(df["total_reward"].mean()),
         "std_reward": float(df["total_reward"].std(ddof=0)),

@@ -6,7 +6,6 @@ import argparse
 import csv
 import hashlib
 import json
-import sys
 import zipfile
 from pathlib import Path
 from typing import Iterable
@@ -100,7 +99,8 @@ def main(argv: list[str] | None = None) -> int:
         'worlds/warsaw_centrum_osm_1km_v1_urban_world_layers.npz',
     ]
 
-    critical_checkpoint = 'experiments/m12C_real_vienna_footway_learning/checkpoints/stage_M12C_vienna_reward_only_C/stage_M12C_vienna_reward_only_C_latest.zip'
+    critical_checkpoint = ('experiments/m12C_real_vienna_footway_learning/checkpoints/stage_M12C_vienna_reward_only_C/'
+                           'stage_M12C_vienna_reward_only_C_latest.zip')
 
     table_rows = read_csv(root / 'reproducibility' / 'manifests' / 'TABLE_FILE_MAP.csv')
     table_required = []
@@ -138,7 +138,8 @@ def main(argv: list[str] | None = None) -> int:
         'summary_json': len(list((root / 'experiments').rglob('*_summary.json'))),
         'trajectory_npy': len(list((root / 'experiments').rglob('*.npy'))),
         'model_zip_in_models_dirs': len(list((root / 'experiments').glob('**/models/*.zip'))),
-        'all_weight_like_zip': len([p for p in (root / 'experiments').rglob('*.zip') if ('/models/' in p.as_posix() or '/checkpoints/' in p.as_posix())]),
+        'all_weight_like_zip': len([p for p in (root / 'experiments').rglob('*.zip')
+                                    if ('/models/' in p.as_posix() or '/checkpoints/' in p.as_posix())]),
     }
 
     # Check SB3 archive structure for required weights.

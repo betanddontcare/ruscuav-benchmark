@@ -1,3 +1,5 @@
+# The early RUSCUAV-v0 example (static risk-cost A* on a 10 m grid in AOI_SYNTH_001-003).
+# Its planner settings are not the paper's: see configs/README.md.
 benchmark: RUSCUAV-v0
 regime: static
 worlds:

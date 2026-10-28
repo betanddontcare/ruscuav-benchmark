@@ -1,6 +1,6 @@
 """RUSCUAV cargo-UAV Gymnasium environment.
 
-The environment needs the ``env`` extra (``pip install "ruscuav-benchmark[env]"``:
+The environment needs the ``env`` extra (``pip install -e ".[env]"`` in the repository:
 gymnasium, scipy); the configuration classes import without it.
 
 >>> from ruscuav_benchmark import UrbanWorldLayers
@@ -39,7 +39,7 @@ from .dynamic_risk import REPORTED_DYNAMIC_CONFIG, DynamicRiskConfig, DynamicRis
 if TYPE_CHECKING:
     from .env import RuscuavEnv
 
-_EXTRA_HINT = 'ruscuav_benchmark.env needs the "env" extra: pip install "ruscuav-benchmark[env]"'
+_EXTRA_HINT = 'ruscuav_benchmark.env needs the "env" extra: pip install -e ".[env]" in the repository'
 
 
 def _import_env():

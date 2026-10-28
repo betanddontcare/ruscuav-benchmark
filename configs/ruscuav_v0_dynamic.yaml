@@ -1,3 +1,5 @@
+# The early v0 proxy of dynamic risk (ruscuav_benchmark.dynamic), superseded by the dynamic risk
+# of the paper, ruscuav_benchmark.env.dynamic_risk.REPORTED_DYNAMIC_CONFIG: see configs/README.md.
 benchmark: RUSCUAV-v0
 regime: dynamic-risk-proxy
 inherits: configs/ruscuav_v0_static.yaml

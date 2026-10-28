@@ -1,4 +1,6 @@
 # RUSCUAV planning-baseline reproduction profile.
+# static_M9 and receding_M10 are STATIC_Astar and LOCAL_RH_Astar of ruscuav_benchmark.planners.PLANNER_PRESETS;
+# the archived dynamic runs (DYN_RH_Astar) used other settings than dynamic_M11 (configs/README.md).
 static_M9:
   plan_res_m: 5.0
   planner_agl_m: 40.0

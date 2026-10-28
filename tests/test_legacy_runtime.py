@@ -15,7 +15,7 @@ import pytest
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
-from ruscuav_benchmark.legacy import runtime
+from ruscuav_benchmark.legacy import runtime  # noqa: E402
 
 
 def test_path_rewriting():
@@ -55,7 +55,8 @@ def test_virtual_drive_takes_extra_inputs(tmp_path):
         (archive / rel).write_bytes(b"original")
     extra = tmp_path / "vienna.npz"
     extra.write_bytes(b"real world")
-    drive = runtime.prepare_virtual_drive(archive, tmp_path / "drive", {extra: "worlds/vienna_x_urban_world_layers.npz"})
+    drive = runtime.prepare_virtual_drive(archive, tmp_path / "drive",
+                                          {extra: "worlds/vienna_x_urban_world_layers.npz"})
     assert (drive / "worlds/vienna_x_urban_world_layers.npz").read_bytes() == b"real world"
 
 
@@ -80,8 +81,9 @@ def test_state_patches_restore_the_notebook_m8_variants():
         "reward_only_no_action_shield_diag", "reward_only_no_geom_shield_diag", "reward_only_no_shields_diag",
     ]
     assert variants["reward_only"]["urban_risk_lambda_mult"] == 1.0
-    assert (variants["risk_only"]["urban_risk_lambda_mult"], variants["risk_only"]["green_bonus_lambda"]) == (1.0, 0.0)
-    assert (variants["green_only"]["urban_risk_lambda_mult"], variants["green_only"]["green_bonus_lambda"]) == (0.0, 0.03)
+    risk_only, green_only = variants["risk_only"], variants["green_only"]
+    assert (risk_only["urban_risk_lambda_mult"], risk_only["green_bonus_lambda"]) == (1.0, 0.0)
+    assert (green_only["urban_risk_lambda_mult"], green_only["green_bonus_lambda"]) == (0.0, 0.03)
 
 
 def test_state_patch_anchors_must_be_unique():
@@ -111,6 +113,7 @@ def test_one_archived_planner_episode_reproduces(tmp_path):
         "primary_no_terminal_STATIC_Astar_n200_seed5000/primary_no_terminal_STATIC_Astar_n200_seed5000_episodes.csv"
     ).iloc[0]
     row = rerun.iloc[0]
-    for col in ("steps", "termination", "is_success", "mission_acceptable", "road_time", "sidewalk_time", "building_time"):
+    for col in ("steps", "termination", "is_success", "mission_acceptable", "road_time", "sidewalk_time",
+                "building_time"):
         assert str(row[col]) == str(archived[col]), col
     assert abs(row["urban_cumulative_risk"] - archived["urban_cumulative_risk"]) < 1e-9

@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, Tuple
 
 import numpy as np
 
 from .world import AOIManifestEntry, UrbanWorldLayers, run_world_gate_checks
 
 
-def _line_distance_to_segment(x: np.ndarray, y: np.ndarray, p0: Tuple[float, float], p1: Tuple[float, float]) -> np.ndarray:
+def _line_distance_to_segment(x: np.ndarray, y: np.ndarray, p0: Tuple[float, float],
+                              p1: Tuple[float, float]) -> np.ndarray:
     x0, y0 = p0
     x1, y1 = p1
     vx, vy = x1 - x0, y1 - y0

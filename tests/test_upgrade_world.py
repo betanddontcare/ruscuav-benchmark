@@ -9,8 +9,8 @@ import numpy as np
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
-from ruscuav_benchmark.synthetic import create_synthetic_world
-from ruscuav_benchmark.world import UrbanWorldLayers
+from ruscuav_benchmark.synthetic import create_synthetic_world  # noqa: E402
+from ruscuav_benchmark.world import UrbanWorldLayers  # noqa: E402
 
 SCRIPT = REPO / "scripts" / "upgrade_world_npz.py"
 

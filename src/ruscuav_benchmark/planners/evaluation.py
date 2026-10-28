@@ -145,7 +145,9 @@ def evaluate_planner(
 
         env_config = chosen_protocol.environment_config(spec.env_method, dynamic_risk=spec.kind == "dynamic")
         chosen_protocol.check_environment(env_config)
-        new_env = (lambda: env_package.RuscuavEnv(world, env_config))
+
+        def new_env():
+            return env_package.RuscuavEnv(world, env_config)
     else:
         new_env, env_config = _env_factory(spec, world, regime, stage, mode, risk_profile, dynamic_risk)
     grid = RiskCostGrid(world, spec.config, risk_profile)

@@ -20,12 +20,12 @@ sys.path.insert(0, str(REPO / "src"))
 from ruscuav_benchmark.planners import summarize_planner_rows, write_rows_csv  # noqa: E402
 
 ARCHIVE = os.environ.get("RUSCUAV_ARCHIVE")
-STATIC_PLANNER_RUN = "experiments/paperA_primary_no_terminal_static_planners/eval/primary_no_terminal_{0}_n200_seed5000/" \
-                     "primary_no_terminal_{0}_n200_seed5000"
+STATIC_PLANNER_RUN = ("experiments/paperA_primary_no_terminal_static_planners/eval/"
+                      "primary_no_terminal_{0}_n200_seed5000/primary_no_terminal_{0}_n200_seed5000")
 #: The primary dynamic evaluation; its summary adds conditional statistics of the
 #: post-hoc step, which summarize_planner_rows does not compute.
-DYNAMIC_PLANNER_RUN = "experiments/paperA_primary_no_terminal_dynamic/eval/primary_no_terminal_dynamic_receding_Astar/" \
-                      "primary_no_terminal_dynamic_receding_Astar"
+DYNAMIC_PLANNER_RUN = ("experiments/paperA_primary_no_terminal_dynamic/eval/"
+                       "primary_no_terminal_dynamic_receding_Astar/primary_no_terminal_dynamic_receding_Astar")
 
 
 def _rows():
@@ -71,7 +71,8 @@ def test_summary_statistics_follow_pandas():
                      "steps": int(rng.integers(80, 300)), "dist_xy": float(rng.uniform(0, 40)),
                      "cargo_health": float("nan") if i % 5 == 0 else float(rng.uniform(0.8, 1.0)),
                      "urban_mean_risk": float(rng.uniform(0, 1)), "urban_max_risk": float(rng.uniform(0, 8)),
-                     "urban_cumulative_risk": float(rng.uniform(0, 60)), "termination": "success" if i % 3 else "stuck"})
+                     "urban_cumulative_risk": float(rng.uniform(0, 60)),
+                     "termination": "success" if i % 3 else "stuck"})
     s = summarize_planner_rows(rows, "static")
     df = pd.DataFrame(rows)
     assert s["mean_cargo_health"] == df["cargo_health"].mean()
@@ -85,8 +86,10 @@ def test_summary_statistics_follow_pandas():
 
 
 @pytest.mark.skipif(not ARCHIVE, reason="needs RUSCUAV_ARCHIVE (the extracted v2.0.0 archive)")
-@pytest.mark.parametrize("name, kind, min_compared", [("STATIC_Astar", "static", 20), ("LOCAL_RH_Astar", "receding", 20),
-                                                      ("FULL_RH_Astar", "receding", 20), ("DYN_RH_Astar", "dynamic", 14)])
+@pytest.mark.parametrize("name, kind, min_compared", [("STATIC_Astar", "static", 20),
+                                                      ("LOCAL_RH_Astar", "receding", 20),
+                                                      ("FULL_RH_Astar", "receding", 20),
+                                                      ("DYN_RH_Astar", "dynamic", 14)])
 def test_summaries_equal_the_archived_ones(name, kind, min_compared):
     pd = pytest.importorskip("pandas")
     stem = Path(ARCHIVE) / (DYNAMIC_PLANNER_RUN if kind == "dynamic" else STATIC_PLANNER_RUN.format(name))

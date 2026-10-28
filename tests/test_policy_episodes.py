@@ -125,7 +125,8 @@ def test_evaluate_policy_writes_the_archived_files(world, tmp_path):
     assert config["environment"]["resolved"]["terminate_on_urban_constraint"] is False
     assert sorted(p.name for p in (tmp_path / f"{prefix}_paths").iterdir()) == [
         "episode_00000_seed_5000_path.npy", "episode_00001_seed_5011_path.npy"]
-    assert [r["mission_acceptable"] for r in result.rows] == [r["mission_acceptable_posthoc_static"] for r in result.rows]
+    assert [r["mission_acceptable"] for r in result.rows] == [
+        r["mission_acceptable_posthoc_static"] for r in result.rows]
 
 
 def test_csv_equals_pandas(world, tmp_path):
@@ -150,7 +151,8 @@ def test_formats_labels_and_regimes(world):
     assert r.rows[0]["policy_kind"] == "geometry_only" and "method" not in r.rows[0]
     r = evaluate_policy(world, TargetSeekingPolicy(), "DYN-RISK-RL", seeds=[5003], max_steps=5, label="mine")
     assert r.row_format == "dynamic" and r.rows[0]["method"] == "mine"
-    r = evaluate_policy(world, TargetSeekingPolicy(), "OBS-RL", seeds=[5003], max_steps=5, stage="c", mode="strict_eval")
+    r = evaluate_policy(world, TargetSeekingPolicy(), "OBS-RL", seeds=[5003], max_steps=5, stage="c",
+                        mode="strict_eval")
     assert r.summary["regime"]["name"] == "stage_C_strict_eval" and r.rows[0]["stage"] == "C"
     r = evaluate_policy(world, lambda obs: np.zeros(2, dtype=np.float32), "RISK+OBS-RL", seeds=[5003], max_steps=3)
     assert r.rows[0]["steps"] == 3 and r.summary["policy"]["kind"] == "function"
@@ -209,7 +211,8 @@ def test_cli_policy_errors(tmp_path, capsys, extra, message):
 
 def test_default_names_do_not_collide_and_nothing_is_written_on_errors(world, tmp_path):
     a = evaluate_policy(world, TargetSeekingPolicy(), "GEO-RL", seeds=[5003], max_steps=3, output_dir=tmp_path)
-    b = evaluate_policy(world, TargetSeekingPolicy(damping=0.0), "GEO-RL", seeds=[5003], max_steps=3, output_dir=tmp_path)
+    b = evaluate_policy(world, TargetSeekingPolicy(damping=0.0), "GEO-RL", seeds=[5003], max_steps=3,
+                        output_dir=tmp_path)
     c = evaluate_policy(world, TargetSeekingPolicy(), "GEO-RL", seeds=[5003], max_steps=3, output_dir=tmp_path,
                         row_format="transfer")
     assert a.csv_path == b.csv_path  # the same class and settings: give a prefix to keep both

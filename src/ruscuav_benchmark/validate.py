@@ -154,6 +154,20 @@ def validate_world_npz(path: str | Path) -> ValidationReport:
 
 
 def _read_arrays(path: Path, report: ValidationReport) -> Dict[str, np.ndarray]:
+    # NumPy takes any file that is neither a ZIP archive nor a .npy file for a pickle,
+    # and refuses it as such; say what the file is instead
+    try:
+        with path.open("rb") as f:
+            magic = f.read(6)
+    except OSError as exc:
+        report.errors.append(f"cannot be read ({type(exc).__name__}: {exc})")
+        return {}
+    if not magic:
+        report.errors.append("not an NPZ archive: the file is empty")
+        return {}
+    if not (magic.startswith(b"PK\x03\x04") or magic.startswith(b"PK\x05\x06") or magic == b"\x93NUMPY"):
+        report.errors.append("not an NPZ archive: the file is neither a ZIP archive nor a NumPy file")
+        return {}
     try:
         npz = np.load(path, allow_pickle=False)
     except Exception as exc:
@@ -199,7 +213,8 @@ def _validate(path: Path, report: ValidationReport) -> None:
     else:
         report.info["schema_version"] = None
         report.warnings.append(
-            f"no schema_version (file predates {WORLD_SCHEMA_VERSION}); it is read with the {WORLD_SCHEMA_VERSION} rules"
+            f"no schema_version (file predates {WORLD_SCHEMA_VERSION}); "
+            f"it is read with the {WORLD_SCHEMA_VERSION} rules"
         )
     if "meta_json" in arrays:
         text = _scalar(arrays, "meta_json", report, "text")
@@ -235,7 +250,8 @@ def _validate(path: Path, report: ValidationReport) -> None:
     bbox_arr = arrays["bbox"]
     bbox = None
     if bbox_arr.shape != (4,) or bbox_arr.dtype.kind not in "iuf":
-        report.errors.append(f"bbox must be 4 numbers (minx, miny, maxx, maxy); got shape {bbox_arr.shape}, dtype {bbox_arr.dtype}")
+        report.errors.append(f"bbox must be 4 numbers (minx, miny, maxx, maxy); got shape {bbox_arr.shape}, "
+                             f"dtype {bbox_arr.dtype}")
     else:
         bbox = bbox_arr.astype(np.float64)
         if not np.all(np.isfinite(bbox)) or bbox[2] <= bbox[0] or bbox[3] <= bbox[1]:

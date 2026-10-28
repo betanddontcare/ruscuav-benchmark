@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import csv
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, List, Optional
 
 import numpy as np
 
@@ -110,7 +110,8 @@ def evaluate_path(
         hard_steps += int(cons["any_hard_violation"])
     diffs = np.diff(np.asarray(path_xy, dtype=np.float32), axis=0)
     path_length = float(np.sum(np.linalg.norm(diffs, axis=1))) if len(path_xy) > 1 else 0.0
-    final_distance = 0.0 if target_xy is None else float(np.linalg.norm(np.asarray(path_xy[-1], dtype=np.float32) - np.asarray(target_xy, dtype=np.float32)))
+    final_distance = 0.0 if target_xy is None else float(np.linalg.norm(
+        np.asarray(path_xy[-1], dtype=np.float32) - np.asarray(target_xy, dtype=np.float32)))
     success = bool(final_distance <= budgets.success_radius_m)
     record: Dict[str, float | int | bool | str] = {
         "scenario_id": scenario_id,

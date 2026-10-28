@@ -100,7 +100,8 @@ def derived_metrics(row: Row, dt_s: float = DT_S, budgets: Mapping[str, float] =
     steps = _number(row, "steps")
     duration = steps * float(dt_s)
     out["episode_duration_s"] = duration
-    risk = _number(row, "urban_cumulative_risk") if "urban_cumulative_risk" in row else _number(row, "mean_cumulative_risk")
+    risk = (_number(row, "urban_cumulative_risk") if "urban_cumulative_risk" in row
+            else _number(row, "mean_cumulative_risk"))
     out["urban_risk_per_step"] = _div(risk, steps)
     out["urban_risk_per_s"] = _div(risk, duration)
     if dynamic:

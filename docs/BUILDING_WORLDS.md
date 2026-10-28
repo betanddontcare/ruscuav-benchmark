@@ -8,7 +8,7 @@ zones and terrain. It validates the world and, if asked, records a protocol for 
 It needs the `gis` extra (and the `env` extra for the protocol):
 
 ```bash
-pip install "ruscuav-benchmark[gis,env]"
+pip install -e ".[gis,env]"      # in the repository
 
 # from an OpenStreetMap XML file of the area
 ruscuav build-aoi --center 48.2152,16.3975 --aoi-id my_area --osm area.osm \

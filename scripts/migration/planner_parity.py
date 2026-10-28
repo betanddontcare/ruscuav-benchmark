@@ -161,7 +161,8 @@ def compare_records(ref: Recorder, new: Recorder) -> List[str]:
             if not same:
                 problems.append(f"plan {i} {name}: {x!r} vs {y!r}")
                 break
-    ref_info, new_info = (ref.reset_infos[-1] if ref.reset_infos else {}), (new.reset_infos[-1] if new.reset_infos else {})
+    ref_info = ref.reset_infos[-1] if ref.reset_infos else {}
+    new_info = new.reset_infos[-1] if new.reset_infos else {}
     if ref_info != new_info:
         problems.append(f"reset info: {ref_info} vs {new_info}")
     return problems
@@ -251,7 +252,8 @@ def run_reference(ns, c, seed, legacy_env_world, legacy_planner_world, rec: Reco
     original_m11 = ns.M11DynamicRecedingRiskPlanner
     try:
         if c["kind"] == "static":
-            cfg = ns.M9PlannerConfig(**{k: v for k, v in fields.items() if k in ns.M9PlannerConfig.__dataclass_fields__})
+            known = ns.M9PlannerConfig.__dataclass_fields__
+            cfg = ns.M9PlannerConfig(**{k: v for k, v in fields.items() if k in known})
             planner = ns.M9StaticRiskCostPlanner(world=legacy_planner_world, config=cfg, risk_profile="balanced")
             record_plans(planner, rec)
             row, _, _ = ns.rollout_m9_static_planner_episode(
@@ -355,7 +357,8 @@ def compare_functions(ns, legacy_world, package_world, n_random: int = 40, seed:
             problems.append("grid geometry differs")
         planner = StaticPlanner(package_world, PlannerConfig(**fields), grid=grid)
         for _ in range(n_random // 4):
-            a, b = rng.uniform(0.0, 1000.0, size=2).astype(np.float32), rng.uniform(0.0, 1000.0, size=2).astype(np.float32)
+            a = rng.uniform(0.0, 1000.0, size=2).astype(np.float32)
+            b = rng.uniform(0.0, 1000.0, size=2).astype(np.float32)
             p, q = legacy.plan(a, b), planner.plan(a, b)
             if not (p["reason"] == q["reason"] and _same(p["path_xy"], q["path_xy"]) and p["expanded"] == q["expanded"]
                     and (p["cost"] == q["cost"] or (math.isinf(p["cost"]) and math.isinf(q["cost"])))):
@@ -365,7 +368,8 @@ def compare_functions(ns, legacy_world, package_world, n_random: int = 40, seed:
     for prior in ("zero", "mean", "blurred", "perfect"):
         for known in (True, False):
             fields = {**preset_fields("LOCAL_RH_Astar"), "prior_risk_mode": prior, "hard_blockers_known": known}
-            legacy = ns.M10RecedingHorizonRiskPlanner(world=legacy_world, config=ns.M10RecedingHorizonPlannerConfig(**fields))
+            legacy = ns.M10RecedingHorizonRiskPlanner(world=legacy_world,
+                                                      config=ns.M10RecedingHorizonPlannerConfig(**fields))
             new = RecedingHorizonPlanner(package_world, RecedingPlannerConfig(**fields))
             problems = []
             for step in range(6):

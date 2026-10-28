@@ -183,7 +183,8 @@ def _non_npy_member(path, payload):
 MALFORMED = {
     "empty_file": lambda p, d: p.write_bytes(b""),
     "plain_npy": lambda p, d: np.save(open(p, "wb"), np.zeros((3, 3))),
-    "zero_size_layers": lambda p, d: np.savez(p, **{k: (np.zeros((0, 0), np.float32) if getattr(v, "ndim", 0) == 2 else v) for k, v in d.items()}),
+    "zero_size_layers": lambda p, d: np.savez(
+        p, **{k: (np.zeros((0, 0), np.float32) if getattr(v, "ndim", 0) == 2 else v) for k, v in d.items()}),
     "bad_meta_json": lambda p, d: np.savez(p, **{**d, "meta_json": np.array("{not json")}),
     "meta_json_not_object": lambda p, d: np.savez(p, **{**d, "meta_json": np.array("[1, 2]")}),
     "bbox_2x2": lambda p, d: np.savez(p, **{**d, "bbox": np.array([[0.0, 0.0], [120.0, 120.0]])}),

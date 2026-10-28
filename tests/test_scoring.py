@@ -26,6 +26,16 @@ from ruscuav_benchmark.protocols import FORMAT, Mission, Protocol, list_protocol
 from ruscuav_benchmark.scenarios import read_scenarios  # noqa: E402
 from ruscuav_benchmark.tables import parse_float, read_rows_csv, write_rows_csv  # noqa: E402
 
+
+def _pandas_2():
+    """pandas, for the comparisons with the archive's post-processing, which read its CSVs
+    with pandas 2.2.2; the package reads them as pandas 2 does, and pandas 3 reads
+    some numbers differently."""
+    pd = pytest.importorskip("pandas")
+    if int(pd.__version__.split(".")[0]) >= 3:
+        pytest.skip(f"the comparison is with pandas 2 (pandas {pd.__version__} is installed)")
+    return pd
+
 ARCHIVE = os.environ.get("RUSCUAV_ARCHIVE")
 
 
@@ -84,10 +94,7 @@ def test_read_rows_csv_reads_what_pandas_reads(tmp_path):
     exact = read_rows_csv(path, exact_floats=True)
     assert [r["e"] for r in exact] == [-math.inf, 1.5, 2.0]  # round trip: -infinity, but +infinity is an error
     assert parse_float(" 1.5 ", exact=True) == 1.5 and parse_float("1e400", exact=True) is None
-    try:
-        import pandas as pd
-    except ModuleNotFoundError:
-        return
+    pd = _pandas_2()
     for exact_floats, rows_read in ((False, rows), (True, exact)):
         df = pd.read_csv(path, float_precision="round_trip" if exact_floats else None)
         for column in df.columns:
@@ -128,7 +135,7 @@ def _random_csv(rng):
 
 
 def test_read_rows_csv_agrees_with_pandas(tmp_path):
-    pd = pytest.importorskip("pandas")
+    pd = _pandas_2()
     rng = random.Random(11)
     for k in range(60):
         path = tmp_path / f"r{k}.csv"
@@ -183,11 +190,13 @@ def _synthetic_rows(rng, n=60, dynamic=False, offset=0.0, seed0=5000):
         row = {
             "episode": k, "seed": seed0 + k, "method": "M", "total_reward": rng.uniform(-500, 1500), "steps": steps,
             "termination": "success" if success else rng.choice(["stuck", "shield_stuck", "timeout"]),
-            "is_success": success, "dist_xy": rng.uniform(0, 300), "path_length_xy": rng.choice([0.0, rng.uniform(1, 900)]),
+            "is_success": success, "dist_xy": rng.uniform(0, 300),
+            "path_length_xy": rng.choice([0.0, rng.uniform(1, 900)]),
             "cargo_health": rng.uniform(0.7, 1.0), "urban_cumulative_risk": rng.uniform(0, 80),
             "road_time": rng.choice([0.0, rng.uniform(0, 30)]), "sidewalk_time": rng.uniform(0, 9),
             "building_time": rng.uniform(0, 20), "green_time": rng.uniform(0, 40), "canopy_time": rng.uniform(0, 10),
-            "sensitive_time": rng.choice([0.0, 0.0, 0.0, 0.5]), "urban_hard_violation_steps": rng.choice([0, 0, 0, 0, 2]),
+            "sensitive_time": rng.choice([0.0, 0.0, 0.0, 0.5]),
+            "urban_hard_violation_steps": rng.choice([0, 0, 0, 0, 2]),
         }
         if dynamic:
             row["dynamic_cumulative_risk"] = rng.uniform(0, 25)
@@ -219,7 +228,7 @@ def _records(df):
 
 
 def test_tables_agree_with_the_notebook_code(tmp_path):
-    pd = pytest.importorskip("pandas")
+    pd = _pandas_2()
     pytest.importorskip("scipy")
     import notebook_reference as nb
 
@@ -290,7 +299,8 @@ def test_score_runs_writes_the_tables(tmp_path):
                                                         "run_summaries.csv"]
     assert len(scoring.score_runs(runs).training_seed_ci) == 3
     # runs in another regime are not pooled with the primary ones
-    secondary = scoring.Run("A", _synthetic_rows(rng), train_seed=3001.0, scope="x", regime="secondary_operational_stopping")
+    secondary = scoring.Run("A", _synthetic_rows(rng), train_seed=3001.0, scope="x",
+                            regime="secondary_operational_stopping")
     seed_table = scoring.score_runs(runs[:2] + [secondary]).training_seed_ci
     assert {r["regime"] for r in seed_table} == {"primary_no_terminal"} and {r["n"] for r in seed_table} == {2}
     # comparisons from several sources need not have the same columns

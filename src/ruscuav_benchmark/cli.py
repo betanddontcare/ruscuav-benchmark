@@ -197,7 +197,8 @@ def _evaluate_policy(args: argparse.Namespace, world, missions):
         if args.archive is None:
             raise ValueError("--checkpoint needs --archive (the extracted v2.0.0 archive)")
         if args.checkpoint not in ARCHIVED_CHECKPOINTS:
-            raise ValueError(f"unknown checkpoint {args.checkpoint!r}; available: {', '.join(sorted(ARCHIVED_CHECKPOINTS))}")
+            raise ValueError(f"unknown checkpoint {args.checkpoint!r}; "
+                             f"available: {', '.join(sorted(ARCHIVED_CHECKPOINTS))}")
         policy = archived_checkpoint(args.checkpoint, args.archive)
         method = args.method or ARCHIVED_CHECKPOINTS[args.checkpoint].method
         overrides = checkpoint_env_overrides(args.checkpoint)
@@ -515,7 +516,7 @@ def _cmd_build_aoi(args: argparse.Namespace) -> int:
                                   "digest": protocol.digest()}
     except ModuleNotFoundError as exc:
         print(f"ruscuav build-aoi: {exc}. Building worlds needs the \"gis\" extra (and recording a protocol the "
-              "\"env\" extra): pip install \"ruscuav-benchmark[gis,env]\"", file=sys.stderr)
+              "\"env\" extra): pip install -e \".[gis,env]\" in the repository", file=sys.stderr)
         return 2
     except MemoryError:
         grid = "" if aoi is None else f" for a grid of {aoi.shape[0]} x {aoi.shape[1]} cells"
@@ -570,7 +571,8 @@ def _cmd_protocol_create(args: argparse.Namespace) -> int:
     try:
         # the world file is recorded relative to the protocol file's folder, where find_world looks first
         try:
-            world_file = Path(os.path.relpath(Path(args.world).resolve(), Path(args.output).resolve().parent)).as_posix()
+            world_file = Path(os.path.relpath(Path(args.world).resolve(),
+                                              Path(args.output).resolve().parent)).as_posix()
         except ValueError:  # another drive (Windows)
             world_file = Path(args.world).resolve().as_posix()
         p = make_protocol(args.world, args.name, n_episodes=args.episodes, seed0=args.seed0, regime=args.regime,
@@ -626,7 +628,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--evaluation", default=None,
                    help="re-run an archived policy evaluation, e.g. static/RISK+GREEN-RL/4001 or "
                         "dynamic/DYN-OBS-RL/1001 (see docs/POLICIES.md); needs --archive")
-    p.add_argument("--archive", default=None, help="extracted RUSCUAV v2.0.0 archive, for --checkpoint and --evaluation")
+    p.add_argument("--archive", default=None,
+                   help="extracted RUSCUAV v2.0.0 archive, for --checkpoint and --evaluation")
     p.add_argument("--method", default=None,
                    help="method preset of the policy's environment, e.g. RISK+GREEN-RL (default for --checkpoint: "
                         "the preset it was trained in)")

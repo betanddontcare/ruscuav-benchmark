@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (2.1.0.dev0)
+## 2.1.0 (unreleased)
 
 - Legacy notebook code runs outside Colab: `ruscuav_benchmark.legacy.runtime` and
   `scripts/legacy_parity.py`, which reproduces archived primary episodes
@@ -157,6 +157,33 @@
   synthetic worlds wants them exclusive).
 - `UrbanWorldLayers.save_npz` returns the path of the file it wrote, with the `.npz`
   NumPy adds to a name without it.
+- Packaging: version 2.1.0; extras `all` (`env`, `rl`, `gis`) and `test`; the licence
+  as the SPDX expression `MIT AND CC-BY-4.0`, with the licence files in the wheel;
+  classifiers for Python 3.10–3.13; PyYAML is no longer a dependency (no code used it).
+  The source distribution holds the package (the tests need the bundled worlds and
+  stay in the repository). The messages about missing extras say
+  `pip install -e ".[...]"`: the package is installed from the repository.
+- README rewritten as the benchmark's entry page (installation, quick start, the
+  paper's results); new docs/README.md (index of the guides),
+  docs/SOFTWAREX_CODE_METADATA.md, configs/README.md (which configurations the
+  package holds and which are the early v0 profiles) and scripts/README.md.
+  `CITATION.cff` and `codemeta.json` describe the software, version 2.1.0.
+- Continuous integration (`.github/workflows/tests.yml`): ruff, the tests on Python
+  3.10–3.13 with the base package and the `env` and `gis` extras, a check of the
+  installed package (entry point, protocol files), and the tests with the lowest
+  versions `pyproject.toml` allows. The `test` extra holds pandas below 3: the package
+  reads CSVs as pandas 2 does, as the archive's post-processing did.
+- Code style checked by ruff (`pyproject.toml`: pycodestyle errors and warnings,
+  pyflakes, lines of up to 120 characters; the notebook's verbatim code excluded):
+  unused imports removed, long lines wrapped, without changes of behaviour.
+- `ruscuav validate` reports an empty file, or one that is neither a ZIP archive nor
+  a NumPy file, as such (NumPy 1.23 called it pickled data).
+- `scripts/verify_paper_ready_references.py` checks the tables of the v2.0.0 archive
+  (`paper_ready_v2/`, before only `paper_ready_v1/`, so that it passed without
+  checking anything) and fails when it finds no tables; docs/REPRODUCIBILITY.md gives
+  its result. `make_protocols.py` and `migration/extract_legacy_env.py` take `--help`. It also notes that the equal-information table holds
+  operational-stopping evaluations, whose success rates are lower than the primary
+  ones.
 
 ## 2.0.0 — 2026-07-24
 

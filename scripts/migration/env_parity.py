@@ -34,7 +34,7 @@ import sys
 import time
 import types
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Optional
 
 import numpy as np
 
@@ -166,7 +166,8 @@ def _same(a: Any, b: Any, path: str) -> Optional[str]:
         return None
     if isinstance(a, dict) and isinstance(b, dict):
         if set(a) != set(b):
-            return f"{path}: keys differ, only reference {sorted(set(a) - set(b))}, only candidate {sorted(set(b) - set(a))}"
+            return (f"{path}: keys differ, only reference {sorted(set(a) - set(b))}, "
+                    f"only candidate {sorted(set(b) - set(a))}")
         for key in a:
             diff = _same(a[key], b[key], f"{path}.{key}")
             if diff:
@@ -195,7 +196,8 @@ def _action(policy: str, env, rng: np.random.Generator) -> np.ndarray:
     if policy == "hover":  # no command: low-speed penalties, then the stuck termination
         return np.zeros(2, dtype=np.float32)
     if policy in ("seek", "away"):  # towards (away from) the target, with noise to exercise the shields
-        to_target = np.asarray(env.target_point[:2], dtype=np.float64) - np.asarray(env.current_pos[:2], dtype=np.float64)
+        to_target = (np.asarray(env.target_point[:2], dtype=np.float64)
+                     - np.asarray(env.current_pos[:2], dtype=np.float64))
         norm = float(np.linalg.norm(to_target))
         direction = to_target / norm if norm > 1e-9 else np.zeros(2)
         if policy == "away":  # reaches the workspace boundary
@@ -257,7 +259,8 @@ def main() -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     p.add_argument("--archive", required=True, type=Path)
     p.add_argument("--candidate", default=DEFAULT_CANDIDATE,
-                   help=f"dotted module name or module file exposing the legacy factory names (default {DEFAULT_CANDIDATE})")
+                   help="dotted module name or module file exposing the legacy factory names "
+                        f"(default {DEFAULT_CANDIDATE})")
     p.add_argument("--work", type=Path, default=REPO / "runs" / "env_parity")
     p.add_argument("--variants", nargs="+", default=["all"])
     p.add_argument("--seeds", nargs="+", type=int, default=[5000])

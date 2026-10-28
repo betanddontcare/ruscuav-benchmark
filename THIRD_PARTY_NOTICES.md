@@ -6,4 +6,4 @@ The Vienna and Warsaw AOI construction scripts and metadata refer to OpenStreetM
 
 ## Python ecosystem
 
-The benchmark uses third-party Python packages including NumPy, pandas, SciPy, Matplotlib, PyTorch, Stable-Baselines3, Gymnasium, GeoPandas, Shapely, Rasterio, PyProj, Fiona, OSMnx and NetworkX. Their respective licenses apply. Exact environment information is included under `reproducibility/`.
+The benchmark uses third-party Python packages including NumPy, pandas, SciPy, Matplotlib, PyTorch, Stable-Baselines3, Gymnasium, GeoPandas, Shapely, Rasterio, PyProj, Fiona, OSMnx and NetworkX. Their respective licenses apply. Exact environment information is in `requirements-reproducibility.txt` and, in the Zenodo archive, under `reproducibility/`.

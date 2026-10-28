@@ -29,7 +29,7 @@ __all__ = [
     "default_label", "summarize_policy_rows",
 ]
 
-_RL_HINT = 'loading a PPO checkpoint needs the "rl" extra: pip install "ruscuav-benchmark[rl]"'
+_RL_HINT = 'loading a PPO checkpoint needs the "rl" extra: pip install -e ".[rl]" in the repository'
 
 
 @dataclass

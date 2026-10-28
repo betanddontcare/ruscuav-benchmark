@@ -59,7 +59,8 @@ def _reference_scan(lidar, pos, target):
 
 
 def _env(world, **lidar):
-    config = make_config("RISK+OBS-RL", stage="B", mode="strict_eval", **({"lidar": LidarConfig(**lidar)} if lidar else {}))
+    config = make_config("RISK+OBS-RL", stage="B", mode="strict_eval",
+                         **({"lidar": LidarConfig(**lidar)} if lidar else {}))
     env = RuscuavEnv(world, config)
     # the reference path uses the old lookup throughout
     env.risk_model._ij_from_xy = types.MethodType(_old_ij, env.risk_model)

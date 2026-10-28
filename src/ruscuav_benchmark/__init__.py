@@ -25,7 +25,7 @@ from .planners import (
 )
 
 #: Single source of the package version (pyproject.toml reads it from here).
-__version__ = "2.1.0.dev0"
+__version__ = "2.1.0"
 
 __all__ = [
     "AOIManifestEntry",

@@ -387,7 +387,8 @@ def score_runs(runs: Sequence[Run], comparisons: Optional[Iterable[Mapping[str, 
             by_label[run.label] = run
         used = {spec[k] for spec in comparisons for k in ("method_a", "method_b")}
         if used & repeated:
-            raise ValueError(f"labels {sorted(used & repeated)} name several runs; give each compared run its own label")
+            raise ValueError(f"labels {sorted(used & repeated)} name several runs; give each compared run its "
+                             "own label")
         tables.paired_tests = holm_table(comparisons, by_label, budgets)
     return tables
 

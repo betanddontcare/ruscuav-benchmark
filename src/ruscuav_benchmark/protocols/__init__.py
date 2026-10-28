@@ -349,7 +349,8 @@ class Protocol:
         return cls(
             name=str(data["name"]), description=str(data.get("description", "")), world_id=str(world["id"]),
             world_layers_sha256=str(world["layers_sha256"]), missions=missions, world_file=world.get("file"),
-            world_distributed=bool(world.get("distributed", False)), regime=str(data.get("regime", "primary_no_terminal")),
+            world_distributed=bool(world.get("distributed", False)),
+            regime=str(data.get("regime", "primary_no_terminal")),
             dynamic_risk=data.get("dynamic_risk"), acceptability=str(data.get("acceptability", "static")),
             budgets={k: float(v) for k, v in (data.get("budgets") or DEFAULT_BUDGETS).items()},
             risk_profile=str(data.get("risk_profile", "balanced")), dt_s=float(data.get("dt_s", DT_S)),
@@ -442,7 +443,8 @@ def make_protocol(world: Union[str, Path, UrbanWorldLayers], name: str, *, n_epi
             dyn["dynamic_cumulative_risk_budget"] = float(budgets["dynamic"])
         else:
             raise ValueError(f"the dynamic budget of budgets ({budgets['dynamic']}) and the "
-                             f"dynamic_cumulative_risk_budget of dynamic_risk ({dyn['dynamic_cumulative_risk_budget']}) "
+                             "dynamic_cumulative_risk_budget of dynamic_risk "
+                             f"({dyn['dynamic_cumulative_risk_budget']}) "
                              "differ; give one")
     config = make_config("RISK+OBS-RL", regime=regime, risk_profile=risk_profile)
     env = RuscuavEnv(layers, config)

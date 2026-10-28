@@ -72,7 +72,8 @@ def check_tables(archive: Path) -> dict:
             out[name] = {"rows": len(theirs) - 1, "lines_differing": differing}
             if differing:
                 out[name]["max_relative_difference"] = _max_relative_difference(
-                    read_rows_csv(path, exact_floats=True), read_rows_csv(archive / TABLE_FILES[name], exact_floats=True))
+                    read_rows_csv(path, exact_floats=True),
+                    read_rows_csv(archive / TABLE_FILES[name], exact_floats=True))
     return out
 
 

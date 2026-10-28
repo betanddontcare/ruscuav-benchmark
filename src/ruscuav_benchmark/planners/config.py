@@ -157,7 +157,8 @@ class PlannerSpec:
     def with_config(self, **changes: Any) -> "PlannerSpec":
         """The same planner with some configuration fields (or ``dynamic_prior_mode``) changed."""
         changes = dict(changes)
-        spec_changes = {"dynamic_prior_mode": changes.pop("dynamic_prior_mode")} if "dynamic_prior_mode" in changes else {}
+        spec_changes = ({"dynamic_prior_mode": changes.pop("dynamic_prior_mode")}
+                        if "dynamic_prior_mode" in changes else {})
         known = {f.name for f in fields(self.config)}
         unknown = sorted(set(changes) - known)
         _require(not unknown, f"unknown {type(self.config).__name__} fields: {unknown}")

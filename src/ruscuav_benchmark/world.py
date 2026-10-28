@@ -311,9 +311,11 @@ def _value_stats(arr: np.ndarray, mask: Optional[np.ndarray] = None) -> Dict[str
 
 
 BASE_RISK_PROFILES: Dict[str, Dict[str, float]] = {
-    "efficiency_first": {"green": 0.05, "canopy": 0.10, "building": 1.50, "road": 3.00, "sidewalk": 6.00, "sensitive": 30.00},
+    "efficiency_first": {"green": 0.05, "canopy": 0.10, "building": 1.50, "road": 3.00, "sidewalk": 6.00,
+                         "sensitive": 30.00},
     "balanced": {"green": 0.10, "canopy": 0.20, "building": 3.00, "road": 6.00, "sidewalk": 12.00, "sensitive": 50.00},
-    "safety_first": {"green": 0.05, "canopy": 0.10, "building": 5.00, "road": 10.00, "sidewalk": 20.00, "sensitive": 100.00},
+    "safety_first": {"green": 0.05, "canopy": 0.10, "building": 5.00, "road": 10.00, "sidewalk": 20.00,
+                     "sensitive": 100.00},
 }
 
 
@@ -373,7 +375,8 @@ def diagnose_world_height_sanity(world: UrbanWorldLayers) -> Dict[str, Any]:
         "negative_height_above_ground_pixels": int(np.sum(world.height_above_ground < -1e-3)),
         "building_height_negative_pixels": int(np.sum(world.building_height < -1e-3)),
         "canopy_height_negative_pixels": int(np.sum(world.canopy_height < -1e-3)),
-        "building_mask_without_height_pixels": int(np.sum((world.building_mask > 0.5) & (world.building_height <= 0.1))),
+        "building_mask_without_height_pixels": int(np.sum((world.building_mask > 0.5)
+                                                          & (world.building_height <= 0.1))),
         "canopy_mask_without_height_pixels": int(np.sum((world.canopy_mask > 0.5) & (world.canopy_height <= 0.1))),
     }
     return {"passed": all(v == 0 for v in checks.values()), "checks": checks}

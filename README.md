@@ -1,33 +1,103 @@
-# RUSCUAV v2.0.0 — Zenodo reproducibility release
+# RUSCUAV — semantic mission-acceptability benchmark for urban cargo UAVs
 
-**RUSCUAV** (Reproducible Urban Semantic Cargo-UAV) is a benchmark for evaluating low-altitude urban cargo-UAV navigation using **benchmark-defined semantic mission acceptability**, rather than target-reaching success alone.
+**RUSCUAV** (Reproducible Urban Semantic Cargo-UAV) is a benchmark for low-altitude
+urban cargo-UAV navigation that scores missions by **benchmark-defined semantic
+mission acceptability**, not by target-reaching success alone. This repository holds
+`ruscuav-benchmark` 2.1, the Python package of the benchmark. It accompanies the
+manuscript
 
-This release supports the manuscript:
-
-> **RUSCUAV: A Semantic Mission-Acceptability Benchmark for Low-Altitude Urban Cargo UAV Navigation**  
+> **RUSCUAV: A Semantic Mission-Acceptability Benchmark for Low-Altitude Urban Cargo UAV Navigation**
+>
 > Igor Betkier and Mateusz Oszczypała
 
-The release contains source code, synthetic worlds, scenario data, PPO weights, planner and policy outputs, per-episode CSVs, frozen configurations, paper-ready tables and figures, statistical families, provenance manifests, and the manuscript/supplement PDFs. The supplementary material documents the 20-D semantic vector, 6-D dynamic-risk vector, PPO hyperparameters, reward/budget values, method naming, and frozen planner/risk/dynamics parameters.
+whose evaluations, trained weights and paper-ready tables are archived on Zenodo
+(RUSCUAV v2.0.0, see "The Zenodo archive" below). The package reproduces them and
+lets any method be evaluated the same way.
 
-## Version and record
+## What the package does
 
-- Release version: **2.0.0**
-- Previous Zenodo version: **10.5281/zenodo.21331403**
-- This package is intended for publication as the **next version of the same Zenodo record**.
-- Zenodo will assign a new version-specific DOI when the new version is published.
+- **Worlds.** Raster worlds of an urban area (terrain, surface, buildings, roads,
+  pedestrian ways, green areas, canopy, sensitive zones) in a documented NPZ schema;
+  `ruscuav validate` checks any world file. Four synthetic worlds come with the
+  repository, and `ruscuav build-aoi` builds the world of any city from OpenStreetMap
+  with the pipeline of the paper's real-GIS worlds.
+- **Environment.** `ruscuav_benchmark.env.RuscuavEnv`, a Gymnasium environment with the
+  paper's method presets, curriculum stages and evaluation regimes; it reproduces the
+  research notebook's environments step for step.
+- **Methods.** The paper's risk-cost A* planners (static, receding-horizon, dynamic)
+  and PPO policies (the archived checkpoints, and training with the paper's
+  curriculum).
+- **Protocols.** Fixed missions, regime, dynamic risk and budgets under which results
+  are compared; the paper's four protocols come with the package, and
+  `ruscuav protocol create` records one for any world.
+- **Scoring.** Trajectories of any method (another simulator, a learned policy,
+  recorded flights) scored with the environment's accounting, and `ruscuav score`:
+  success, mission acceptability, training-seed confidence intervals and exact paired
+  tests with Holm's correction, computed as in the paper.
 
-## What changed in v2.0.0
+## Installation
 
-Version 2.0.0 changes the primary evaluation protocol and therefore constitutes a major release:
+Python 3.10 to 3.13. From a checkout of the repository:
 
-1. **Primary no-terminal protocol.** Soft road, pedestrian, building, and dynamic-risk budget exceedances are recorded but do not abort the mission. Success is target-region completion; mission acceptability is computed post hoc.
-2. **Secondary operational-stopping protocol.** The former strict Stage-C stopping rule is retained as a separate stress test and is not pooled with primary success rate.
-3. **Five-seed learned-policy reporting.** Headline PPO results use training-seed mean, sample standard deviation, and 95% t-confidence intervals.
-4. **Multi-world and Warsaw zero-shot analyses.** The archive includes the three-world synthetic morphology-shift experiment and scenario-aligned Vienna/Warsaw real-GIS simulation evaluations.
-5. **Full provenance and statistical families.** Claim-driving artifacts, checkpoint resolution, configuration audit, conditional/normalized risk, non-acceptability causes, dynamic-budget sensitivity, and complete Holm families are archived.
-6. **Immutable Vienna checkpoints.** The exact short (75,776 Stage-C steps) and extended (251,904 Stage-C steps) fine-tuning checkpoints are included.
+```bash
+pip install -e ".[env]"          # environment, planners, protocols, trajectory scoring
+pip install -e ".[env,gis]"      # and worlds from OpenStreetMap
+pip install -e ".[all,test]"     # and the PPO policies (Stable-Baselines3, PyTorch), and the tests
+```
 
-## Primary benchmark distinction
+| Extra | Adds | For |
+|---|---|---|
+| (none) | NumPy, SciPy, Matplotlib | `ruscuav validate`, `ruscuav score`, `ruscuav protocol list` and `show` |
+| `env` | Gymnasium, NumPy 2 | the environment, the planners, `ruscuav evaluate`, `ruscuav protocol create` |
+| `rl` | Stable-Baselines3 | the PPO policies |
+| `gis` | OSMnx, GeoPandas, Shapely, Rasterio, PyProj | `ruscuav build-aoi` |
+| `all` | `env`, `rl` and `gis` | everything |
+| `test` | pytest, pandas | the test suite |
+
+`requirements-reproducibility.txt` pins the versions of the archived environment.
+
+## Quick start
+
+From the repository root (the canonical world of the protocols is in
+`worlds/synthetic/`):
+
+```bash
+ruscuav protocol list
+
+# a planner of the paper on the 200 missions of the primary protocol
+ruscuav evaluate --protocol canonical-primary --planner FULL_RH_Astar --output-dir runs/full_rh
+
+# your method, from the positions it flew on each mission (docs/TRAJECTORIES.md)
+ruscuav evaluate --protocol canonical-primary --trajectories my_flights.csv --label MINE --output-dir runs/mine
+
+# both, compared mission by mission
+ruscuav score --protocol canonical-primary MINE=runs/mine/MINE_canonical-primary_episodes.csv \
+    FULL_RH=runs/full_rh/FULL_RH_Astar_canonical-primary_episodes.csv \
+    --compare MINE:FULL_RH:success --compare MINE:FULL_RH:MAR_static --output-dir runs/score
+```
+
+`--episodes 20` flies the first 20 missions only (the files then end in
+`_n20_episodes.csv`). A city of your own:
+
+```bash
+ruscuav build-aoi --center 50.0614,19.9366 --aoi-id krakow --download \
+    --output worlds/krakow.npz --protocol protocols/krakow.json
+ruscuav evaluate --protocol protocols/krakow.json --planner FULL_RH_Astar --output-dir runs/krakow
+```
+
+In Python, the environment:
+
+```python
+from ruscuav_benchmark import UrbanWorldLayers
+from ruscuav_benchmark.env import make_env
+
+world = UrbanWorldLayers.load_npz("worlds/synthetic/AOI_SYNTH_000/urban_world_layers.npz")
+env = make_env(world, "RISK+GREEN-RL", regime="primary_no_terminal")
+obs, info = env.reset(seed=5000)          # the canonical mission of seed 5000
+obs, reward, terminated, truncated, info = env.step(env.action_space.sample())
+```
+
+## The benchmark
 
 ```text
 Success = target-region completion
@@ -40,85 +110,99 @@ Mission acceptability = Success
                         AND hard-violation steps = 0
 ```
 
-The dynamic regime additionally reports whether cumulative dynamic risk is within the benchmark budget of 10. These thresholds are benchmark parameters, not regulatory approval criteria or validated societal-preference thresholds.
+In the primary no-terminal regime, budget exceedances are recorded but do not end
+the mission, and acceptability is computed after it; the secondary
+operational-stopping regime ends missions at operational budgets. The dynamic regime
+adds ground-risk hotspots that rise and fade on roads and pedestrian ways during the
+mission, and requires the cumulative dynamic risk to stay within the budget of 10. These thresholds are benchmark parameters, not regulatory
+approval criteria or validated societal-preference thresholds.
+`BENCHMARK_SPEC.md` gives the specification.
 
-## Archive layout
+## The paper's results
+
+The primary protocol (`canonical-primary`: the synthetic world AOI_SYNTH_000,
+missions of seeds 5000–5199, primary no-terminal regime):
+
+| Method | Success | Mission acceptability |
+|---|---|---|
+| `STATIC_Astar` | 92.5 % | 91.5 % |
+| `LOCAL_RH_Astar` | 98.5 % | 95.0 % |
+| `FULL_RH_Astar` | 98.5 % | 97.0 % |
+| `GEO-RL` (PPO, five training seeds) | 79.3 % [76.4, 82.2] | 71.0 % [65.9, 76.1] |
+| `OBS-RL` (five training seeds) | 82.5 % [79.0, 86.0] | 72.1 % [67.9, 76.3] |
+| `RISK+GREEN-RL` (five training seeds) | 84.4 % [80.2, 88.6] | 75.8 % [70.5, 81.1] |
+| `RISK+OBS-RL` (one checkpoint) | 88.0 % | 78.5 % |
+
+PPO rows give the mean over training seeds with 95 % t-intervals. The dynamic,
+Vienna and Warsaw evaluations and the statistical families are in the archive's
+tables (docs/TABLE_FIGURE_ARTIFACT_MAP.md); docs/REPRODUCIBILITY.md shows how the
+package reproduces them.
+
+## Documentation
+
+docs/README.md lists the guides: the world schema and validation, building worlds
+from OpenStreetMap, the environment, planners, policies, protocols, trajectory
+scoring, the tables and statistics, and the reproduction of the archive.
+
+## Repository and archive
 
 ```text
-RUSCUAV-v2.0.0/
-├── README.md, CITATION.cff, codemeta.json, .zenodo.json
-├── BENCHMARK_SPEC.md, CHANGELOG.md
-├── LICENSE_CODE_MIT, LICENSE_DATA_CC_BY_4_0
-├── code/submission_repair/          final repair and one-click runner code
-├── source_code/                     full supplied Colab/Python exports
-├── src/, scripts/, tests/, examples/
-├── configs/                         frozen experiment configurations
-├── worlds/synthetic/                canonical and AOI_SYNTH_001–003 worlds
-├── worlds/real_gis/metadata/        Vienna/Warsaw metadata only
-├── scenarios/
-├── models/                          model manifest + immutable Vienna checkpoints
-├── experiments/                     raw per-episode CSVs, summaries and model weights
-├── results/                         curated archived references
-├── paper_ready_v2/                  final tables, JSON and vector/raster figures
-├── paper/                           manuscript and supplementary PDFs
-├── provenance/                      configs, hashes, resolved checkpoints, run state
-├── reproducibility/                 environment snapshots and verification assets
-├── manifests/                       file, model and world manifests
-└── SHA256SUMS
+src/ruscuav_benchmark/   the package (legacy/: the research notebook's code, kept verbatim)
+tests/                   the test suite
+docs/                    guides
+scripts/                 tools and checks against the archive (scripts/README.md)
+worlds/synthetic/        the four synthetic worlds (AOI_SYNTH_000, AOI_SYNTH_001-003)
+worlds/real_gis/         metadata of the Vienna and Warsaw worlds (the worlds are not distributed)
+scenarios/               the recorded missions of the canonical and Vienna evaluations
+configs/                 the settings of the archived experiments (configs/README.md)
+code/submission_repair/  the code of the archived one-click repair runs
+examples/                a quickstart script
 ```
 
-## Real-GIS release policy
+### The Zenodo archive
 
-Processed Vienna and Warsaw `UrbanWorldLayers` NPZ files are **not included** in v2.0.0. The release includes:
-
-- real-GIS generation code in the full source export;
-- the frozen real-GIS pipeline configuration;
-- AOI metadata and layer-construction parameters;
-- per-episode evaluation outputs and summaries;
-- OpenStreetMap attribution information.
-
-Users can regenerate the real-GIS worlds from OpenStreetMap data with `ruscuav build-aoi --preset vienna` (or `warsaw`), the package's port of the archived pipeline, and build worlds of other areas the same way (`docs/BUILDING_WORLDS.md`). See `docs/OSM_ATTRIBUTION.md` and `worlds/real_gis/README.md`.
-
-## Verification
-
-From the extracted archive root:
+The RUSCUAV v2.0.0 archive on Zenodo (a new version of the record of v1.0.0,
+10.5281/zenodo.21331403) holds what the repository does not: the per-episode CSVs and summaries of the
+evaluations and the trained weights (`experiments/`; `models/` lists the weights and
+holds the Vienna fine-tuning checkpoints), the paper-ready tables, JSON and figures
+(`paper_ready_v2/`),
+the manuscript and supplement (`paper/`), and provenance, environment snapshots and
+manifests. The package's reproduction checks take the extracted archive
+(`--archive`), and from its root:
 
 ```bash
 python scripts/verify_v2_release.py --root .
-```
-
-The verifier checks required files, file hashes, exact Vienna checkpoints, final PDFs, primary tables, representative Warsaw paths, and the absence of processed Vienna/Warsaw NPZ files.
-
-For a complete checksum verification:
-
-```bash
 sha256sum -c SHA256SUMS
 ```
 
-## Key result locations
+## Real-GIS worlds and OpenStreetMap
 
-- Primary static five-seed summary: `paper_ready_v2/tables/paper_table_primary_no_terminal_static_training_seed_ci.csv`
-- All primary run summaries: `paper_ready_v2/tables/paper_table_primary_no_terminal_all_run_summaries.csv`
-- Training-seed summary across scopes: `paper_ready_v2/tables/paper_table_primary_no_terminal_training_seed_ci_all_scopes.csv`
-- Conditional and normalized risk: `paper_ready_v2/tables/paper_table_conditional_normalized_risk_metrics.csv`
-- Non-acceptability causes: `paper_ready_v2/tables/paper_table_non_acceptability_cause_decomposition.csv`
-- Dynamic-budget sensitivity: `paper_ready_v2/tables/paper_table_dynamic_budget_sensitivity.csv`
-- Complete Holm families: `paper_ready_v2/tables/paper_table_holm_full_families.csv`
-- Multi-world strict stress test: `paper_ready_v2/tables/paper_table_multiworld_synthetic_per_world.csv`
-- Final figures: `paper_ready_v2/figures_final/`
-- Exact run and checkpoint provenance: `provenance/`
+The processed Vienna and Warsaw worlds are not distributed. `ruscuav build-aoi
+--preset vienna` (or `warsaw`) rebuilds them from OpenStreetMap data, and
+`scenarios/real_gis/` records the missions and the layers checksum of the paper's
+Vienna world (docs/BUILDING_WORLDS.md, worlds/real_gis/README.md). OpenStreetMap data are
+© OpenStreetMap contributors under the ODbL; worlds built from them are derived
+databases (docs/OSM_ATTRIBUTION.md).
 
-See `docs/TABLE_FIGURE_ARTIFACT_MAP.md` for the full mapping.
+## Tests
 
-## Environment
+```bash
+pip install -e ".[env,gis,test]"
+pytest
+```
 
-The archived Colab snapshot is stored under `reproducibility/v1_environment_and_audit/uploaded_assets/`. Asset verification requires only NumPy, pandas and PyYAML. Model loading and complete re-evaluation require Stable-Baselines3, PyTorch, Gymnasium, SciPy and the GIS stack listed in `requirements-reproducibility.txt`.
+Tests that compare the package with the archive run when `RUSCUAV_ARCHIVE` points
+to the extracted archive (and `RUSCUAV_VIENNA_WORLD` to the Vienna world); they are
+skipped otherwise.
 
-## Licenses
+## Licences
 
 - **Source code and executable scripts:** MIT License (`LICENSE_CODE_MIT`).
-- **Synthetic worlds, trained weights, results, tables, figures, documentation and paper files:** CC BY 4.0 (`LICENSE_DATA_CC_BY_4_0`).
-- **OpenStreetMap-derived metadata:** released with attribution and subject to the upstream OpenStreetMap/ODbL terms described in `docs/OSM_ATTRIBUTION.md`.
+- **Synthetic worlds, trained weights, results, tables, figures, documentation and
+  paper files:** CC BY 4.0 (`LICENSE_DATA_CC_BY_4_0`); `LICENSE_DATA_AND_ASSETS.md`
+  allocates the files.
+- **OpenStreetMap-derived metadata:** released with attribution and subject to the
+  upstream OpenStreetMap/ODbL terms described in `docs/OSM_ATTRIBUTION.md`.
 
 ## Authors
 
@@ -129,4 +213,6 @@ Faculty of Civil Engineering and Geodesy, Military University of Technology, gen
 
 ## Citation
 
-Use the version-specific Zenodo DOI assigned when v2.0.0 is published and cite the associated manuscript. Machine-readable citation metadata are provided in `CITATION.cff` and `codemeta.json`.
+Cite the associated manuscript and the version of the software you used;
+`CITATION.cff` and `codemeta.json` hold the machine-readable metadata. The changes of
+each version are in `CHANGELOG.md`.

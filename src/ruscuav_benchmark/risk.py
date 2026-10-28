@@ -208,12 +208,18 @@ class UrbanRiskModel:
                 canopy_cost += p.canopy_weight * density
         else:
             canopy_cost = 0.0
-        green_clean = flags["green"] and not flags["road"] and not flags["sidewalk"] and not flags["building"] and not flags["sensitive"]
+        green_clean = (flags["green"] and not flags["road"] and not flags["sidewalk"] and not flags["building"]
+                       and not flags["sensitive"])
         green_cost = p.green_weight * self._decay(z_agl, p.green_h_scale_m) if green_clean else 0.0
-        terrain_cost = p.low_altitude_weight * p.terrain_collision_multiplier if constraints["terrain_collision"] else 0.0
+        terrain_cost = (p.low_altitude_weight * p.terrain_collision_multiplier if constraints["terrain_collision"]
+                        else 0.0)
         if self.include_global_altitude_band_cost:
-            low_altitude_cost = p.low_altitude_weight * ((p.preferred_agl_low_m - z_agl) / max(1e-6, p.preferred_agl_low_m)) ** 2 if z_agl < p.preferred_agl_low_m else 0.0
-            high_altitude_cost = p.high_altitude_weight * ((z_agl - p.preferred_agl_high_m) / max(1e-6, p.preferred_agl_high_m)) ** 2 if z_agl > p.preferred_agl_high_m else 0.0
+            low_altitude_cost = (p.low_altitude_weight
+                                 * ((p.preferred_agl_low_m - z_agl) / max(1e-6, p.preferred_agl_low_m)) ** 2
+                                 if z_agl < p.preferred_agl_low_m else 0.0)
+            high_altitude_cost = (p.high_altitude_weight
+                                  * ((z_agl - p.preferred_agl_high_m) / max(1e-6, p.preferred_agl_high_m)) ** 2
+                                  if z_agl > p.preferred_agl_high_m else 0.0)
         else:
             low_altitude_cost = high_altitude_cost = 0.0
         components = {
@@ -254,7 +260,8 @@ class UrbanRiskModel:
         b_clearance_bad = b_active & (building_clearance > 0.0) & (building_clearance < p.building_min_clearance_m)
         b_ok = b_active & (building_clearance >= p.building_min_clearance_m)
         building_cost[b_collision] = p.building_weight * p.building_collision_multiplier
-        building_cost[b_clearance_bad] = p.building_weight + p.building_weight * self._decay(building_clearance[b_clearance_bad], p.building_clearance_h_scale_m)
+        building_cost[b_clearance_bad] = p.building_weight + p.building_weight * self._decay(
+            building_clearance[b_clearance_bad], p.building_clearance_h_scale_m)
         building_cost[b_ok] = p.building_weight * self._decay(building_clearance[b_ok], p.building_clearance_h_scale_m)
         canopy_clearance = agl - self.world.canopy_height
         density = np.maximum(0.1, self.world.canopy_density)
@@ -264,8 +271,11 @@ class UrbanRiskModel:
         c_clearance_bad = c_active & (canopy_clearance > 0.0) & (canopy_clearance < p.canopy_min_clearance_m)
         c_ok = c_active & (canopy_clearance >= p.canopy_min_clearance_m)
         canopy_cost[c_collision] = p.canopy_weight * p.canopy_collision_multiplier * density[c_collision]
-        canopy_cost[c_clearance_bad] = p.canopy_weight * density[c_clearance_bad] + p.canopy_weight * density[c_clearance_bad] * self._decay(canopy_clearance[c_clearance_bad], p.canopy_clearance_h_scale_m)
-        canopy_cost[c_ok] = p.canopy_weight * density[c_ok] * self._decay(canopy_clearance[c_ok], p.canopy_clearance_h_scale_m)
+        canopy_cost[c_clearance_bad] = (p.canopy_weight * density[c_clearance_bad]
+                                        + p.canopy_weight * density[c_clearance_bad]
+                                        * self._decay(canopy_clearance[c_clearance_bad], p.canopy_clearance_h_scale_m))
+        canopy_cost[c_ok] = p.canopy_weight * density[c_ok] * self._decay(canopy_clearance[c_ok],
+                                                                         p.canopy_clearance_h_scale_m)
         green_clean = (green > 0.5) & (road <= 0.5) & (sidewalk <= 0.5) & (building <= 0.5) & (sensitive <= 0.5)
         green_cost = np.zeros(self.world.shape, dtype=np.float32)
         green_cost[green_clean] = p.green_weight * self._decay(agl, p.green_h_scale_m)
@@ -273,9 +283,11 @@ class UrbanRiskModel:
         high_altitude_cost = np.zeros(self.world.shape, dtype=np.float32)
         if self.include_global_altitude_band_cost:
             if agl < p.preferred_agl_low_m:
-                low_altitude_cost[:] = p.low_altitude_weight * ((p.preferred_agl_low_m - agl) / max(1e-6, p.preferred_agl_low_m)) ** 2
+                low_altitude_cost[:] = p.low_altitude_weight * (
+                    (p.preferred_agl_low_m - agl) / max(1e-6, p.preferred_agl_low_m)) ** 2
             if agl > p.preferred_agl_high_m:
-                high_altitude_cost[:] = p.high_altitude_weight * ((agl - p.preferred_agl_high_m) / max(1e-6, p.preferred_agl_high_m)) ** 2
+                high_altitude_cost[:] = p.high_altitude_weight * (
+                    (agl - p.preferred_agl_high_m) / max(1e-6, p.preferred_agl_high_m)) ** 2
         maps = {
             "road_cost": road_cost.astype(np.float32),
             "sidewalk_cost": sidewalk_cost.astype(np.float32),

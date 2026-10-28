@@ -104,7 +104,8 @@ def _safety(lidar: bool = True, action_shield: bool = True, geometric_shield: bo
 
 
 def make_ruscuav_env_m4(world, stage="A", risk_profile="balanced", n_obstacles=0, seed=None,
-                        urban_lidar_enabled=True, urban_action_shield_enabled=True, urban_geometric_shield_enabled=True):
+                        urban_lidar_enabled=True, urban_action_shield_enabled=True,
+                        urban_geometric_shield_enabled=True):
     """Full semantic environment at strict sampling resolution, with safety-stack switches
     (the factory of the M4/M6 training code)."""
     _check_obstacles(n_obstacles)

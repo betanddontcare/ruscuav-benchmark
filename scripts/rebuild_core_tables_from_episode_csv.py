@@ -7,7 +7,9 @@ planners. For exact manuscript tables including CIs and paired tests, compare
 against the precomputed CSV/JSON artifacts in paper_ready_v1/ and experiments/.
 """
 from __future__ import annotations
-import argparse, csv, json
+import argparse
+import csv
+import json
 from pathlib import Path
 from collections import Counter
 
@@ -24,14 +26,17 @@ def as_bool(v):
     return str(v).strip().lower() in {'1','true','yes','y'}
 
 def as_float(v):
-    try: return float(v)
-    except Exception: return None
+    try:
+        return float(v)
+    except Exception:
+        return None
 
 def summarize(path: Path):
     rows=list(csv.DictReader(path.open(newline='', encoding='utf-8')))
     n=len(rows)
     out={'n_episodes': n}
-    if n==0: return out
+    if n==0:
+        return out
     if 'is_success' in rows[0]:
         success=sum(as_bool(r.get('is_success')) for r in rows)
         out['success_rate']=success/n
@@ -68,12 +73,14 @@ def main():
         rec.update(s)
         out_rows.append(rec)
         for k in rec:
-            if k not in all_fields: all_fields.append(k)
+            if k not in all_fields:
+                all_fields.append(k)
     out_path=root/args.out
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open('w', newline='', encoding='utf-8') as f:
         w=csv.DictWriter(f, fieldnames=all_fields)
-        w.writeheader(); w.writerows(out_rows)
+        w.writeheader()
+        w.writerows(out_rows)
     print(out_path)
 
 if __name__ == '__main__':

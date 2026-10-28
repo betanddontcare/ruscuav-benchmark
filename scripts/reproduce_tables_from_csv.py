@@ -132,7 +132,8 @@ def main() -> int:
         try:
             df = pd.read_csv(csv_path)
         except Exception as exc:
-            comparison_rows.append({'csv_path': rel_csv, 'metric': '__read_csv__', 'status': 'ERROR', 'error': repr(exc)})
+            comparison_rows.append({'csv_path': rel_csv, 'metric': '__read_csv__', 'status': 'ERROR',
+                                    'error': repr(exc)})
             continue
         rec = recompute_summary(df)
         rec['csv_path'] = rel_csv
@@ -140,7 +141,8 @@ def main() -> int:
 
         summary_path = matching_summary_path(csv_path)
         if summary_path is None:
-            comparison_rows.append({'csv_path': rel_csv, 'metric': '__summary_json__', 'status': 'MISSING_MATCHING_SUMMARY'})
+            comparison_rows.append({'csv_path': rel_csv, 'metric': '__summary_json__',
+                                    'status': 'MISSING_MATCHING_SUMMARY'})
             continue
         original = load_json(summary_path)
         rel_sum = summary_path.relative_to(root).as_posix()
@@ -184,8 +186,10 @@ def main() -> int:
                             'description': row.get('description'),
                             'artifact_file': p.relative_to(root).as_posix() if p.exists() else item,
                             'exists': p.exists(),
-                            'rows': int(pd.read_csv(p).shape[0]) if p.exists() and p.suffix.lower() == '.csv' else None,
-                            'columns': int(pd.read_csv(p).shape[1]) if p.exists() and p.suffix.lower() == '.csv' else None,
+                            'rows': (int(pd.read_csv(p).shape[0])
+                                     if p.exists() and p.suffix.lower() == '.csv' else None),
+                            'columns': (int(pd.read_csv(p).shape[1])
+                                        if p.exists() and p.suffix.lower() == '.csv' else None),
                         })
     pd.DataFrame(table_inventory).to_csv(out_dir / 'paper_table_inventory.csv', index=False)
 
@@ -211,7 +215,8 @@ def main() -> int:
         },
         'strict_pass': mismatch_count == 0 and error_count == 0 and missing_table_count == 0,
     }
-    (out_dir / 'REPRODUCTION_REPORT.json').write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding='utf-8')
+    (out_dir / 'REPRODUCTION_REPORT.json').write_text(json.dumps(report, indent=2, ensure_ascii=False),
+                                                       encoding='utf-8')
     print(json.dumps(report, indent=2, ensure_ascii=False))
 
     if args.strict and not report['strict_pass']:

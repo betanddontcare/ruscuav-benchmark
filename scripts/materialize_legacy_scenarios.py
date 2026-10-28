@@ -176,7 +176,8 @@ def main() -> int:
             for path_file in sorted((archive / M9_PLANNED_PATHS).glob(f"episode_*_seed_{seed}_planned_path.npy")):
                 planned = np.load(path_file, allow_pickle=False)
                 checked_paths += 1
-                if not (np.allclose(planned[0], start[:2], atol=1e-3) and np.allclose(planned[-1], target[:2], atol=1e-3)):
+                if not (np.allclose(planned[0], start[:2], atol=1e-3)
+                        and np.allclose(planned[-1], target[:2], atol=1e-3)):
                     problems.append(f"seed {seed}: archived M9 planned path endpoints differ")
 
         rows.append({
@@ -212,12 +213,14 @@ def main() -> int:
         "world_file": file_info(world_path),
         "world_layers_sha256": world_layers.layers_sha256(),
         **({"archived_world_file": archived_file} if archived_file else {}),
-        "environment": f"make_ruscuav_env_m4_mode(stage={regime.stage!r}, mode={regime.mode!r}, risk_profile='balanced', n_obstacles=0)",
+        "environment": f"make_ruscuav_env_m4_mode(stage={regime.stage!r}, mode={regime.mode!r}, "
+                       "risk_profile='balanced', n_obstacles=0)",
         "variants_cross_checked": [label for label, _ in variants],
         "archived_planned_paths_checked": checked_paths,
         "problems": problems,
         **({"notes": args.note} if args.note else {}),
-        "z_note": "start_z/target_z are absolute altitudes in metres, in the same height frame as the world's terrain_z.",
+        "z_note": "start_z/target_z are absolute altitudes in metres, in the same height frame as the world's "
+                  "terrain_z.",
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
     args.output.with_suffix(".json").write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8")

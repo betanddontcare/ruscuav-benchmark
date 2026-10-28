@@ -1,7 +1,7 @@
 cff-version: 1.2.0
-title: "RUSCUAV v2.0.0: Semantic Mission-Acceptability Benchmark for Low-Altitude Urban Cargo-UAV Navigation"
-message: "Please cite the version-specific Zenodo DOI assigned to v2.0.0 and the associated manuscript."
-type: dataset
+title: "RUSCUAV: Semantic Mission-Acceptability Benchmark for Low-Altitude Urban Cargo-UAV Navigation"
+message: "If you use this software, please cite it with these metadata and cite the associated manuscript."
+type: software
 authors:
   - family-names: Betkier
     given-names: Igor
@@ -13,9 +13,8 @@ authors:
     orcid: "https://orcid.org/0000-0002-1194-6913"
     affiliation: "Faculty of Civil Engineering and Geodesy, Military University of Technology, gen. Sylwestra Kaliskiego Street 2, 00-908 Warsaw, Poland"
     email: "mateusz.oszczypala@wat.edu.pl"
-version: "2.0.0"
-date-released: "2026-07-24"
-license: CC-BY-4.0
+version: "2.1.0"
+license: MIT
 keywords:
   - unmanned aerial vehicle
   - urban cargo-UAV navigation
@@ -25,8 +24,14 @@ keywords:
   - safety-supervised reinforcement learning
   - dynamic ground risk
   - real-GIS simulation
+  - OpenStreetMap
+  - benchmark
 abstract: >-
-  Reproducibility release containing the RUSCUAV benchmark code, synthetic worlds,
-  trained PPO weights, primary no-terminal and secondary operational-stopping
-  per-episode results, planner outputs, provenance, final tables and figures,
-  and the manuscript and supplementary material.
+  RUSCUAV is a benchmark for low-altitude urban cargo-UAV navigation that scores
+  missions by semantic mission acceptability (cargo health, time over roads,
+  pedestrian ways, buildings and sensitive zones, hard violations) as well as by
+  target-reaching success. The ruscuav-benchmark package provides validated world
+  files, a Gymnasium environment, the risk-cost A* planners and PPO policies of the
+  paper, evaluation protocols with fixed missions, scoring of any method's
+  trajectories, the paper's statistics, and a builder of worlds from OpenStreetMap
+  data. The code is MIT-licensed; data, worlds and documentation are CC BY 4.0.
