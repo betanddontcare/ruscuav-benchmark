@@ -157,4 +157,6 @@ A protocol is a JSON file (`"format": "ruscuav-protocol-1"`):
   and the dynamic risk field) and the start and target positions: x and y in metres
   in the world's grid frame, z the absolute altitude in the height frame of the
   world's terrain.
-- `Protocol.digest()` is the SHA-256 of the content without the description.
+- `Protocol.digest()` is the SHA-256 of the content without the description and the
+  location of the world file (`world.file`): the world is identified by its layers
+  checksum, so a protocol recorded with its world at another path keeps its digest.

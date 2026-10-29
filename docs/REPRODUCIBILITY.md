@@ -539,7 +539,10 @@ edge of the workspace (seed 5135 for 9 positions, seed 5158 for 5): there the
 environment clips the position at the edge but keeps the velocity pointing out of
 the workspace, so its cargo model sees accelerations that the positions do not have.
 No mission-acceptability verdict changed. All 1,800 episodes are within the
-vehicle's speed limits and workspace. The scorer counts 7 steps, in 6 episodes (two
+vehicle's speed limits and workspace. (The scorer's acceleration check came after
+these runs; the script now reports the episodes outside the acceleration limits
+too, which in the environment's flights are steps its geometric shield or the
+workspace bounds shortened: docs/TRAJECTORIES.md.) The scorer counts 7 steps, in 6 episodes (two
 each of the three policies), as moving into a hazard between two positions: in each
 the environment's geometric shield had shortened the step, and the samples of the
 flown segment found a sliver of a sensitive zone below its overflight altitude that

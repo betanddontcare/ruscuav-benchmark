@@ -55,6 +55,31 @@ jobs:
           ruscuav --version
           ruscuav protocol list
           ruscuav protocol show canonical-primary > /dev/null
+      - name: a flight with the installed package, outside the checkout
+        # the wheel does not hold the canonical world: outside a checkout it is given with --world
+        if: matrix.set != 'base'
+        working-directory: ${{ runner.temp }}
+        env:
+          WORLD: ${{ github.workspace }}/worlds/synthetic/AOI_SYNTH_000/urban_world_layers.npz
+        run: |
+          ruscuav evaluate --protocol canonical-primary --world "$WORLD" --planner STATIC_Astar --episodes 2 \
+              --output-dir flight --save-paths --quiet
+          # its flown paths, scored again as trajectories, give the same rows
+          ruscuav evaluate --protocol canonical-primary --world "$WORLD" --episodes 2 --label REPLAY \
+              --trajectories flight/STATIC_Astar_canonical-primary_n2_paths --output-dir flight
+          ruscuav score --protocol canonical-primary --output-dir scores \
+              STATIC_Astar=flight/STATIC_Astar_canonical-primary_n2_episodes.csv \
+              REPLAY=flight/REPLAY_canonical-primary_n2_episodes.csv --compare REPLAY:STATIC_Astar:MAR_static
+          python - <<'EOF'
+          import csv
+          keys = ("seed", "termination", "mission_acceptable", "road_time", "sidewalk_time", "building_time")
+          runs = []
+          for name in ("STATIC_Astar", "REPLAY"):
+              with open(f"flight/{name}_canonical-primary_n2_episodes.csv", newline="") as f:
+                  runs.append([tuple(row[k] for k in keys) for row in csv.DictReader(f)])
+          assert len(runs[0]) == 2 and runs[0] == runs[1], runs
+          print("the flown and the re-scored rows agree:", runs[0])
+          EOF
 
   minimum-versions:
     # the lowest versions pyproject.toml allows for the base package

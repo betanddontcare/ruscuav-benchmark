@@ -16,7 +16,7 @@ The benchmark is defined in `BENCHMARK_SPEC.md` (repository root). The guides:
 |---|---|
 | [ENVIRONMENT.md](ENVIRONMENT.md) | the Gymnasium environment: method presets, curriculum stages, regimes, configuration, observations, rewards and shields |
 | [PLANNERS.md](PLANNERS.md) | the risk-cost A* planners of the paper and `ruscuav evaluate --planner` |
-| [POLICIES.md](POLICIES.md) | the PPO policies: the archived checkpoints, evaluation, training |
+| [POLICIES.md](POLICIES.md) | the PPO policies: the archived checkpoints, evaluation (also of checkpoints of other Stable-Baselines3 algorithms), training |
 | [PROTOCOLS.md](PROTOCOLS.md) | evaluation protocols: the paper's four, your own (`ruscuav protocol create`) |
 | [TRAJECTORIES.md](TRAJECTORIES.md) | scoring the trajectories of any method (`ruscuav evaluate --trajectories`) |
 | [SCORING.md](SCORING.md) | `ruscuav score`: run summaries, training-seed intervals, causes of non-acceptability, paired tests with Holm's correction |
@@ -30,6 +30,7 @@ The benchmark is defined in `BENCHMARK_SPEC.md` (repository root). The guides:
 | [DATASET_CARD.md](DATASET_CARD.md) | the archive's intended uses and limitations |
 | [ZENODO_UPLOAD.md](ZENODO_UPLOAD.md) | how the v2.0.0 archive was uploaded to Zenodo |
 | [SOFTWAREX_CODE_METADATA.md](SOFTWAREX_CODE_METADATA.md) | the code metadata of the package, as SoftwareX asks for it |
+| [../examples/softwarex/README.md](../examples/softwarex/README.md) | the examples of the SoftwareX paper: scripts and their results |
 | [RELEASING.md](RELEASING.md) | the steps of a release: repository URL, date, checks, Zenodo DOI, PyPI |
 
 `configs/README.md` describes the configurations of the archived experiments and

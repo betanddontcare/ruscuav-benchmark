@@ -156,7 +156,8 @@ worlds/real_gis/         metadata of the Vienna and Warsaw worlds (the worlds ar
 scenarios/               the recorded missions of the canonical and Vienna evaluations
 configs/                 the settings of the archived experiments (configs/README.md)
 code/submission_repair/  the code of the archived one-click repair runs
-examples/                a quickstart script
+examples/                a quickstart script; softwarex/: the examples of the SoftwareX paper
+                         (examples/softwarex/README.md)
 ```
 
 ### The Zenodo archive

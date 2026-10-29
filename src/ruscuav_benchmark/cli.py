@@ -85,6 +85,8 @@ def _cmd_evaluate(args: argparse.Namespace) -> int:
             raise ValueError(f"give --planner or {sources[0]}, not both")
         if sources and args.set:
             raise ValueError("--set changes planner settings; it does not apply to policies or trajectories")
+        if args.algorithm is not None and args.policy is None:
+            raise ValueError("--algorithm applies to --policy")
         if kind == "planner" and (args.method or args.format or args.label or args.stochastic or args.archive):
             raise ValueError("--method, --format, --label, --stochastic and --archive apply to "
                              "--policy, --checkpoint and --evaluation")
@@ -129,7 +131,7 @@ def _cmd_evaluate(args: argparse.Namespace) -> int:
     s = result.summary
     keys = ["n_episodes", "success_rate", "mission_acceptability_rate", "acceptable_given_success_rate",
             "mean_steps", "termination_counts", "cargo_health_estimated", "episodes_outside_speed_limits",
-            "episodes_outside_workspace", "episodes_with_hazard_segments"]
+            "episodes_outside_acceleration_limits", "episodes_outside_workspace", "episodes_with_hazard_segments"]
     regime = s["regime"]["name"] if isinstance(s.get("regime"), dict) else s.get("regime")
     out = {kind if kind != "trajectories" else "label": name, "world_id": s["world_id"], "regime": regime}
     if isinstance(s.get("protocol"), dict):
@@ -144,6 +146,12 @@ def _cmd_evaluate(args: argparse.Namespace) -> int:
             counts = ", ".join(f"{k}: {v}" for k, v in unflyable.items())
             print(f"note: some trajectories could not have been flown by the environment's vehicle ({counts}); "
                   "their scores are not comparable with the environment's methods (docs/TRAJECTORIES.md)",
+                  file=sys.stderr)
+        n_fast = s.get("episodes_outside_acceleration_limits")
+        if n_fast:
+            print(f"note: {n_fast} {'trajectory accelerates' if n_fast == 1 else 'trajectories accelerate'} "
+                  "faster than the vehicle's commands can; the environment's own flights do so only where its "
+                  "geometric shield or the workspace bounds stop or shorten a step (docs/TRAJECTORIES.md)",
                   file=sys.stderr)
     return 0
 
@@ -216,7 +224,7 @@ def _evaluate_policy(args: argparse.Namespace, world, missions):
         n_episodes=args.episodes, seed0=5000 if args.seed0 is None else args.seed0, row_format=args.format,
         label=args.label, deterministic=not args.stochastic, risk_profile=args.profile, env_overrides=overrides,
         protocol=args.protocol, output_dir=args.output_dir, prefix=args.prefix, save_paths=args.save_paths,
-        progress=_progress(args, name),
+        progress=_progress(args, name), algorithm=args.algorithm or "PPO",
     )
     return name, result
 
@@ -319,9 +327,13 @@ def _check_against_protocol(run, protocol) -> Dict[str, Any]:
         if isinstance(record, dict) and record.get("digest"):
             recorded_protocol = record.get("name")
             if record["digest"] != protocol.digest():
+                same_name = record.get("name") == protocol.name
                 raise ValueError(f"{what} was flown under the protocol {record.get('name')!r} (digest "
                                  f"{str(record['digest'])[:12]}...), not under {protocol.name!r} (digest "
-                                 f"{protocol.digest()[:12]}...)")
+                                 f"{protocol.digest()[:12]}...)" + (
+                                     "; the same name with other content, or a digest from a development "
+                                     "version of 2.1.0, which included the world file's location: fly the run "
+                                     "again" if same_name else ""))
         else:
             world_id = recorded.get("world_id")
             if world_id is not None and canonical_aoi_id(str(world_id)) != protocol.world_id:
@@ -509,8 +521,13 @@ def _cmd_build_aoi(args: argparse.Namespace) -> int:
                 world_file = Path(os.path.relpath(out.resolve(), protocol_path.resolve().parent)).as_posix()
             except ValueError:  # another drive (Windows)
                 world_file = out.resolve().as_posix()
+            from .gis import ATTRIBUTION
+
+            description = (f"{args.episodes} missions in {built.world.aoi_id} from seed {args.seed0}, sampled by "
+                           f"RuscuavEnv.reset. {ATTRIBUTION}.")
             protocol = make_protocol(built.world, args.protocol_name or built.world.aoi_id,
-                                     n_episodes=args.episodes, seed0=args.seed0, world_file=world_file)
+                                     n_episodes=args.episodes, seed0=args.seed0, world_file=world_file,
+                                     description=description)
             protocol.save(protocol_path)
             result["protocol"] = {"name": protocol.name, "file": str(protocol_path), "missions": protocol.n_episodes,
                                   "digest": protocol.digest()}
@@ -604,7 +621,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser(
         "evaluate", help="fly a planner of the paper or a policy on a world, or score flown trajectories (needs the "
                          "'env' extra)",
-        description="Fly a planner of the paper, or a PPO policy, on a world, one episode per mission, and write "
+        description="Fly a planner of the paper, or a policy, on a world, one episode per mission, and write "
                     "the per-episode CSV and the summary. Missions come from --protocol, from --scenarios, or are "
                     "sampled by the environment from seeds --seed0, --seed0+1, ... Policies need the 'rl' extra. "
                     "With --trajectories, positions flown by any other method are scored on a protocol's missions "
@@ -622,7 +639,11 @@ def build_parser() -> argparse.ArgumentParser:
                         "CSV (docs/TRAJECTORIES.md); needs --protocol")
     p.add_argument("--planner", default=None, choices=list(PLANNER_PRESETS),
                    help="planner (default FULL_RH_Astar unless a policy is given)")
-    p.add_argument("--policy", default=None, help="Stable-Baselines3 PPO checkpoint (.zip) to fly; needs --method")
+    p.add_argument("--policy", default=None,
+                   help="Stable-Baselines3 checkpoint (.zip) to fly, PPO unless --algorithm says otherwise; "
+                        "needs --method")
+    p.add_argument("--algorithm", default=None, choices=("PPO", "A2C", "SAC", "TD3", "DDPG"),
+                   help="the Stable-Baselines3 algorithm of the --policy checkpoint (default PPO)")
     p.add_argument("--checkpoint", default=None,
                    help="archived checkpoint to fly, e.g. RISK+GREEN-RL/4001 (see docs/POLICIES.md); needs --archive")
     p.add_argument("--evaluation", default=None,

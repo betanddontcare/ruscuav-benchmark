@@ -188,7 +188,39 @@
   the archiving of GitHub releases on Zenodo; `LICENSE_DATA_CC_BY_4_0` is a licence
   notice (it was a note for before the release); the description of the
   `vienna-primary` protocol carries the OpenStreetMap attribution of its missions (its
-  digest and missions are unchanged); docs/RELEASING.md lists the steps of a release.
+  missions are unchanged, and the description is not part of the digest);
+  docs/RELEASING.md lists the steps of a release.
+- `Protocol.digest()` leaves out the location of the world file (`world.file`), as its
+  docstring said it did; the world is identified by its layers checksum. A protocol
+  recorded with its world at another path keeps its digest, so runs recorded under
+  it are scored together. The digests of the packaged protocols change, and runs
+  recorded with earlier development versions of 2.1.0 carry the old ones (`ruscuav
+  score --protocol` refuses them and says why); so do the default file names of runs
+  under a protocol whose settings checksum covers the protocol record (policies, and
+  planners with `--set`). `ruscuav build-aoi --protocol` records the OpenStreetMap
+  attribution in the protocol's description.
+- Trajectory scoring also checks accelerations: `max_acc_z_mps2`,
+  `within_acceleration_limits` (the norm of the vehicle's command box horizontally,
+  `a_max_z` vertically; `acceleration_limits()`) and, in the summary,
+  `episodes_outside_acceleration_limits`. The environment's own flights exceed these
+  limits too, though only on steps that its geometric shield (or the workspace
+  bounds) stopped or shortened; `ruscuav evaluate` therefore notes such trajectories
+  apart from those the vehicle could not have flown (docs/TRAJECTORIES.md), and
+  `scripts/migration/trajectory_parity.py` reports them.
+- `ruscuav evaluate --policy` loads checkpoints of other Stable-Baselines3 algorithms
+  with continuous actions: `--algorithm` A2C, SAC, TD3 or DDPG (PPO by default;
+  `load_policy(..., algorithm=)`, `evaluate_policy(..., algorithm=)`,
+  `ruscuav_benchmark.policies.ALGORITHMS`). The configuration file records the
+  algorithm of any but PPO; PPO and A2C checkpoints share their policy class and load
+  with either.
+- `examples/softwarex/`: the examples of the SoftwareX paper (the external planner
+  GEO_SHORTEST, the runs of its two examples, its Fig. 2 and the data of its Fig. 3),
+  with their results.
+- Tests for the v0 dynamic-risk proxy (`ruscuav_benchmark.dynamic`) and the world
+  quicklook (`ruscuav_benchmark.visualize`).
+- Continuous integration also flies two missions with the installed package outside
+  the checkout, the world given with `--world`, and scores their paths again as
+  trajectories.
 
 ## 2.0.0 — 2026-07-24
 

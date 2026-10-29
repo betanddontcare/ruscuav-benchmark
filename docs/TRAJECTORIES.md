@@ -106,13 +106,32 @@ dynamic risk also `dynamic_risk_mean`, `dynamic_risk_max`, `dynamic_cumulative_r
 and `dynamic_budget_ok`. The return (`total_reward`) is not computed. These columns
 describe the scoring: `termination_reported`, `cargo_health_source` (`given` or
 `estimated`), `positions_ignored`, `max_speed_xy_mps`, `max_speed_z_mps`,
-`max_acc_xy_mps2`, `within_speed_limits`, `within_workspace` and
-`hazard_segment_steps`. The summary counts the episodes with estimated cargo health
-(`cargo_health_estimated`), outside the speed limits or the workspace
-(`episodes_outside_speed_limits`, `episodes_outside_workspace`) and with steps into
-a hazard (`episodes_with_hazard_segments`), and `ruscuav evaluate` notes them: a
-trajectory the vehicle could not fly is scored, but its results are not comparable
+`max_acc_xy_mps2`, `max_acc_z_mps2`, `within_speed_limits`,
+`within_acceleration_limits`, `within_workspace` and `hazard_segment_steps`. The
+summary counts the episodes with estimated cargo health (`cargo_health_estimated`),
+outside the speed or acceleration limits or the workspace
+(`episodes_outside_speed_limits`, `episodes_outside_acceleration_limits`,
+`episodes_outside_workspace`) and with steps into a hazard
+(`episodes_with_hazard_segments`), and `ruscuav evaluate` notes them: a trajectory
+outside the speed limits or the workspace, or with steps into a hazard, could not
+have been flown by the vehicle; it is scored, but its results are not comparable
 with those of the environment's methods.
+
+Accelerations above the limits are noted apart: the environment's own flights reach
+them where the geometric shield, or the bounds of the workspace, stop or shorten a
+step at once (see Checks below), so they mark a trajectory that turns or stops
+faster than the vehicle's commands can, not one that the environment could not have
+produced.
+
+The acceleration limits (`acceleration_limits()`) are those of the vehicle's
+commands: horizontally the norm of the command box, `sqrt(2) * a_max_xy` (8.49 m/s²
+with the default `a_max_xy` of 6 m/s²), vertically `a_max_z` (3 m/s²). The
+accelerations are finite differences of the positions, at rest at the mission's
+start, so a first step faster than 4.24 m/s (8.49 m/s² over 0.5 s) exceeds them.
+The low-pass filter and the jerk limit keep the commands within these bounds, and
+the speed limits only shorten an acceleration. Jerk is not checked separately: at
+the 0.5 s step, two accelerations within the bounds differ by at most 34 m/s³,
+close to the 30 m/s³ jerk limit of the commands.
 
 ## Checks
 
@@ -122,9 +141,19 @@ and the endings that the positions do not show (`shield_stuck`, a planner withou
 path, `planner_no_path`, and a planner's own step limit, `manual_max_steps`), which
 end as `ended`. Their speeds and positions are within the vehicle's limits and
 workspace, and apart from the shortened steps above no step moves into a hazard.
-`tests/test_trajectories.py` checks this in the three canonical protocols; `scripts/migration/trajectory_parity.py` for the
-paper's planners and three archived policies on all 200 missions
-(docs/REPRODUCIBILITY.md).
+Their accelerations exceed the limits only on steps that the geometric shield (or
+the bounds of the workspace) stopped or shortened, which it does at once. Under
+`canonical-primary` this happens in 21 of FULL_RH_Astar's 200 missions and 20 of
+STATIC_Astar's, and in 153 and 140 of the 200 missions of the archived checkpoints
+RISK+GREEN-RL/4001 and GEO-RL/1001, every exceeding step at or next to a step of
+the shield or the bounds. In the Vienna world, FULL_RH_Astar at 30 m exceeds them
+in 1 of the 200 missions of `vienna-primary`, next to a step of the shield, and in none
+of the missions of the SoftwareX example's protocol (seeds 9000–9199,
+examples/softwarex/).
+`tests/test_trajectories.py` checks the rows in the three canonical protocols and the
+accelerations in `canonical-primary`; `scripts/migration/trajectory_parity.py` checks
+the rows for the paper's planners and three archived policies on all 200 missions
+and reports the episodes outside the acceleration limits (docs/REPRODUCIBILITY.md).
 
 `ruscuav_benchmark.metrics.evaluate_path`, kept from v2.0.0, is a lightweight helper
 for waypoint paths: it samples the path at a fixed speed and altitude above the

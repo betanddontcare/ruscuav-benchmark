@@ -16,7 +16,9 @@ its flown paths saved. Two comparisons follow:
    episodes may leave the speed limits or the workspace. Steps counted as moving
    into a hazard are reported: on a step that the environment's geometric shield
    shortened, the samples of the shortened segment can find a hazard sliver that
-   the shield's samples along the commanded segment skipped.
+   the shield's samples along the commanded segment skipped. So are episodes
+   outside the acceleration limits: the geometric shield stops or shortens a step
+   at once, faster than the vehicle's commands can.
 
 Cases: the static, local and full receding-horizon A* in canonical-primary, the
 dynamic planner in canonical-dynamic, the full planner in canonical-secondary (no
@@ -118,10 +120,12 @@ def compare_with_archive(rows: List[Dict[str, Any]], archived: List[Dict[str, An
 def compare_scored(flown: List[Dict[str, Any]], scored: List[Dict[str, Any]]) -> Dict[str, Any]:
     out: Dict[str, Any] = {"rows": len(flown), "identical_apart_from_cargo": 0, "cargo_max_abs_diff": 0.0,
                            "acceptability_changed_by_cargo": 0, "other_differences": {}, "endings": {},
-                           "unflyable": {"outside_speed_limits": 0, "outside_workspace": 0, "hazard_segments": 0}}
+                           "unflyable": {"outside_speed_limits": 0, "outside_acceleration_limits": 0,
+                                         "outside_workspace": 0, "hazard_segments": 0}}
     for a, b in zip(flown, scored):
         assert a["seed"] == b["seed"]
         out["unflyable"]["outside_speed_limits"] += not b["within_speed_limits"]
+        out["unflyable"]["outside_acceleration_limits"] += not b["within_acceleration_limits"]
         out["unflyable"]["outside_workspace"] += not b["within_workspace"]
         out["unflyable"]["hazard_segments"] += b["hazard_segment_steps"] > 0
         diffs = [c for c in a if c in b and c not in _NOT_SCORED and not _same(a[c], b[c])]

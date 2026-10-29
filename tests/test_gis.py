@@ -387,6 +387,7 @@ def test_build_aoi_from_the_command_line(osm_file, tmp_path, capsys, monkeypatch
     assert printed["protocol"]["missions"] == 2
     data = json.loads(protocol.read_text(encoding="utf-8"))
     assert data["world"]["file"] == "../worlds/town.npz" and data["missions"][0]["seed"] == 7000
+    assert "© OpenStreetMap contributors" in data["description"] and "ODbL 1.0" in data["description"]
     # the protocol finds its world next to it
     assert main(["evaluate", "--protocol", str(protocol), "--planner", "STATIC_Astar", "--episodes", "1",
                  "--output-dir", str(tmp_path / "eval"), "--quiet"]) == 0

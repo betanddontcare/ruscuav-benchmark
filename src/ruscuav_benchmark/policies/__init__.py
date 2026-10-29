@@ -26,6 +26,7 @@ from .checkpoints import (
     sha256_file,
 )
 from .evaluation import (
+    ALGORITHMS,
     PolicyEvaluation,
     default_label,
     default_row_format,
@@ -40,7 +41,7 @@ from .training import PPO_SETTINGS, TRAINING_SCHEDULES, make_training_env, train
 
 __all__ = [
     "ARCHIVED_CHECKPOINTS", "ARCHIVED_EVALUATIONS", "ArchivedCheckpoint", "ArchivedEvaluation", "archived_checkpoint",
-    "checkpoint_env_overrides", "sha256_file", "PolicyEvaluation", "evaluate_policy", "evaluate_archived",
+    "checkpoint_env_overrides", "sha256_file", "ALGORITHMS", "PolicyEvaluation", "evaluate_policy", "evaluate_archived",
     "load_policy", "summarize_policy_rows",
     "default_row_format", "default_label", "ROW_FORMATS", "run_policy_episode", "fly", "policy_action",
     "PPO_SETTINGS", "TRAINING_SCHEDULES", "make_training_env", "train_ppo", "TargetSeekingPolicy", "ConstantPolicy",

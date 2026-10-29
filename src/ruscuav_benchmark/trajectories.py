@@ -22,8 +22,10 @@ the environment's cargo model from the accelerations of the positions (finite
 differences, starting at rest). The rows also report what the environment's vehicle
 could not have flown: speeds above its limits, positions outside its workspace and
 steps whose motion enters a hazard between two positions, which the environment's
-geometric shield would have stopped. The action shield of the environment has no
-counterpart here, so ``shield_stuck`` cannot occur.
+geometric shield would have stopped; and accelerations above the limits of its
+commands, which the environment's own flights reach only where that shield, or the
+bounds of the workspace, stop or shorten a step. The action shield of the
+environment has no counterpart here, so ``shield_stuck`` cannot occur.
 """
 
 from __future__ import annotations
@@ -40,11 +42,25 @@ from .posthoc import DEFAULT_BUDGETS, dynamic_acceptability, static_acceptabilit
 from .tables import Row
 
 __all__ = ["Trajectory", "read_trajectories", "write_trajectories_csv", "score_trajectory", "score_trajectories",
-           "trajectory_env", "TrajectoryEvaluation", "evaluate_trajectories"]
+           "trajectory_env", "acceleration_limits", "TrajectoryEvaluation", "evaluate_trajectories"]
 
 _SEED_IN_NAME = re.compile(r"seed_?(-?\d+)")
 #: Tolerance of the workspace bounds (m), for positions rounded to float32.
 _WORKSPACE_TOLERANCE_M = 1e-3
+#: Tolerance of the acceleration limits (m/s^2): finite differences of float32 positions.
+_ACCELERATION_TOLERANCE = 1e-2
+
+
+def acceleration_limits(dynamics: Any) -> Dict[str, float]:
+    """The largest accelerations (m/s^2) the environment's vehicle can fly with the
+    dynamics configuration ``dynamics``: horizontally the norm of its command box
+    (each axis up to ``a_max_xy``), vertically ``a_max_z``. The low-pass filter and
+    the jerk limit keep the commands within these bounds, and the speed limits only
+    shorten an acceleration. A separate jerk check would add little at the
+    environment's step: two accelerations within these bounds differ by at most
+    ``2 * sqrt(2) * a_max_xy`` per step, 34 m/s^3 with the defaults, close to the
+    30 m/s^3 jerk limit of the commands."""
+    return {"xy": float(np.sqrt(2.0) * dynamics.a_max_xy), "z": float(dynamics.a_max_z)}
 
 
 @dataclass
@@ -209,7 +225,7 @@ def score_trajectory(env: Any, seed: int, positions: Any, *, options: Optional[D
     prev = start.astype(np.float64)
     prev32 = np.asarray(start, dtype=np.float32)
     vel_prev = np.zeros(3)
-    max_vxy = max_vz = max_axy = 0.0
+    max_vxy = max_vz = max_axy = max_az = 0.0
     hazard_segments = 0
     end: Optional[str] = None
     info: Dict[str, Any] = {}
@@ -221,6 +237,7 @@ def score_trajectory(env: Any, seed: int, positions: Any, *, options: Optional[D
         max_vxy = max(max_vxy, float(np.hypot(vel[0], vel[1])))
         max_vz = max(max_vz, abs(float(vel[2])))
         max_axy = max(max_axy, float(np.hypot(acc[0], acc[1])))
+        max_az = max(max_az, abs(float(acc[2])))
         # the motion of the step as the environment's geometric shield checks it
         if not hazards.is_unsafe(prev32, include_clearance_violation=True) and \
                 shield.first_hit_on_segment(prev32, p) is not None:
@@ -303,12 +320,16 @@ def score_trajectory(env: Any, seed: int, positions: Any, *, options: Optional[D
         row["mission_acceptable"] = dynamic_acceptability(row, budgets)
     low = np.asarray(env.bounds_low, dtype=np.float64) - _WORKSPACE_TOLERANCE_M
     high = np.asarray(env.bounds_high, dtype=np.float64) + _WORKSPACE_TOLERANCE_M
+    limits = acceleration_limits(d)
     row.update({
         "termination_reported": termination or None,
         "cargo_health_source": "estimated" if given_cargo is None else "given",
         "positions_ignored": int(len(pos) - 1 - steps),
         "max_speed_xy_mps": max_vxy, "max_speed_z_mps": max_vz, "max_acc_xy_mps2": max_axy,
+        "max_acc_z_mps2": max_az,
         "within_speed_limits": bool(max_vxy <= d.v_max_xy + 1e-3 and max_vz <= d.v_max_z + 1e-3),
+        "within_acceleration_limits": bool(max_axy <= limits["xy"] + _ACCELERATION_TOLERANCE
+                                           and max_az <= limits["z"] + _ACCELERATION_TOLERANCE),
         "within_workspace": bool(((flown >= low) & (flown <= high)).all()),
         "hazard_segment_steps": int(hazard_segments),
     })
@@ -368,7 +389,8 @@ def evaluate_trajectories(trajectories: Union[str, Path, Dict[int, Trajectory]],
     post-hoc acceptability with the protocol's budgets (dynamic acceptability in a
     dynamic protocol) and conditional means. The summary also counts the episodes
     the environment's vehicle could not have flown (outside its speed limits or its
-    workspace, or with steps into a hazard) and those with estimated cargo health.
+    workspace, or with steps into a hazard), those that accelerate faster than its
+    commands can, and those with estimated cargo health.
     With ``output_dir``, ``<prefix>_episodes.csv`` (with the derived columns),
     ``<prefix>_summary.json`` and ``<prefix>_config.json`` are written there; the
     default prefix is ``<label>_<protocol>``."""
@@ -393,6 +415,8 @@ def evaluate_trajectories(trajectories: Union[str, Path, Dict[int, Trajectory]],
     summary.update({**jsonable(settings), "seeds": [row["seed"] for row in rows],
                     "cargo_health_estimated": sum(row["cargo_health_source"] == "estimated" for row in rows),
                     "episodes_outside_speed_limits": sum(not row["within_speed_limits"] for row in rows),
+                    "episodes_outside_acceleration_limits": sum(not row["within_acceleration_limits"]
+                                                                for row in rows),
                     "episodes_outside_workspace": sum(not row["within_workspace"] for row in rows),
                     "episodes_with_hazard_segments": sum(row["hazard_segment_steps"] > 0 for row in rows),
                     "finished_at": datetime.now(timezone.utc).isoformat(timespec="seconds")})

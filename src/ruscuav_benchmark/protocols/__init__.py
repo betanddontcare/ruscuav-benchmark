@@ -332,8 +332,12 @@ class Protocol:
         return path
 
     def digest(self) -> str:
-        """SHA-256 of the protocol's content (everything but the description and file location)."""
-        content = {k: v for k, v in self.to_dict().items() if k not in ("description",)}
+        """SHA-256 of the protocol's content: everything but the description and the
+        location of the world file (``world.file``). The world is identified by its
+        layers checksum, so the same protocol recorded with its world at another path
+        has the same digest."""
+        content = {k: v for k, v in self.to_dict().items() if k != "description"}
+        content["world"] = {k: v for k, v in content["world"].items() if k != "file"}
         return hashlib.sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()
 
     @classmethod

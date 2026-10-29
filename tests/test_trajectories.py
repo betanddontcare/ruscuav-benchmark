@@ -113,6 +113,24 @@ def _line(start, target, speed=10.0, dt=0.5, extra=5, z=None):
     return np.array(out)
 
 
+def _ramp(start, target, acc=2.0, speed=10.0, dt=0.5):
+    """Positions along the straight line, accelerating from rest at ``acc`` up to ``speed``."""
+    start, target = np.asarray(start, float), np.asarray(target, float)
+    d = target[:2] - start[:2]
+    length = float(np.linalg.norm(d))
+    t_acc = speed / acc
+    out, k = [start.copy()], 0
+    while True:
+        k += 1
+        t = k * dt
+        s = 0.5 * acc * t * t if t <= t_acc else 0.5 * acc * t_acc * t_acc + speed * (t - t_acc)
+        p = start.copy()
+        p[:2] = start[:2] + d * min(1.0, s / length)
+        out.append(p)
+        if s >= length:
+            return np.array(out)
+
+
 def test_scoring_rules_on_synthetic_trajectories(world):
     protocol = load_protocol("canonical-primary")
     env = trajectory_env(world, protocol)
@@ -123,6 +141,17 @@ def test_scoring_rules_on_synthetic_trajectories(world):
     assert row["termination"] == "success" and row["is_success"] and row["positions_ignored"] > 0
     assert row["dist_xy"] < 30.0 and row["within_speed_limits"] and row["total_reward"] is None
     assert row["steps"] == len(line) - 1 - row["positions_ignored"]
+    # full speed from rest on the first step: 20 m/s^2, beyond the vehicle's commands
+    assert not row["within_acceleration_limits"] and abs(row["max_acc_xy_mps2"] - 20.0) < 1e-3
+    gentle = _ramp(mission.start, mission.target)
+    smooth = score_trajectory(env, mission.seed, gentle, options=options)
+    assert smooth["is_success"] and smooth["within_acceleration_limits"] and smooth["within_speed_limits"]
+    assert smooth["max_acc_xy_mps2"] <= 2.0 + 1e-3 and smooth["max_acc_z_mps2"] < 1e-3
+    climb = gentle.copy()
+    climb[3:, 2] += 1.5  # a 1.5 m step up: 6 m/s^2 vertically, more than the autopilot's 3 m/s^2
+    climbing = score_trajectory(env, mission.seed, climb, options=options)
+    assert climbing["within_speed_limits"] and not climbing["within_acceleration_limits"]
+    assert abs(climbing["max_acc_z_mps2"] - 6.0) < 1e-3
     # into the ground on the third step
     ground = lambda k: (mission.start[2] if k < 3 else -50.0)  # noqa: E731
     row = score_trajectory(env, mission.seed, _line(mission.start, mission.target, z=ground), options=options)
@@ -199,8 +228,51 @@ def test_unflyable_steps_are_flagged(world):
     through = score_trajectory(env, mission.seed, np.array([start, a, b]), options=options, cargo_health=[1.0, 1.0])
     assert through["steps"] == 2 and through["hazard_segment_steps"] == to_a["hazard_segment_steps"] + 1
     assert through["building_collision_steps"] == to_a["building_collision_steps"]  # the positions are outside
-    assert not through["within_speed_limits"]
+    assert not through["within_speed_limits"] and not through["within_acceleration_limits"]
     env.close()
+
+
+def test_flown_accelerations_exceed_the_limits_only_where_the_shield_or_the_bounds_act(world, tmp_path, monkeypatch):
+    """The environment's own flights keep to the acceleration limits of its commands, except on the steps that
+    its geometric shield, or the bounds of its workspace, stop or shorten at once."""
+    from ruscuav_benchmark.env import RuscuavEnv
+    from ruscuav_benchmark.trajectories import acceleration_limits
+
+    acted = {}
+    reset, step = RuscuavEnv.reset, RuscuavEnv.step
+
+    def recording_reset(self, *args, **kwargs):
+        out = reset(self, *args, **kwargs)
+        self._seed_for_test = kwargs.get("seed")
+        acted[self._seed_for_test] = [False]
+        return out
+
+    def recording_step(self, action):
+        out = step(self, action)
+        at_bound = np.isclose(self.current_pos, self.bounds_low, atol=1e-3) | \
+            np.isclose(self.current_pos, self.bounds_high, atol=1e-3)
+        acted[self._seed_for_test].append(bool(out[4]["urban_geom_shielded"]) or bool(at_bound.any()))
+        return out
+
+    monkeypatch.setattr(RuscuavEnv, "reset", recording_reset)
+    monkeypatch.setattr(RuscuavEnv, "step", recording_step)
+    _, paths = _flown(world, tmp_path, "canonical-primary", "GEO-RL", 10)
+    monkeypatch.undo()
+    scored = score_trajectories("canonical-primary", paths, world, n_episodes=10)
+    env = trajectory_env(world, load_protocol("canonical-primary"))
+    limits = acceleration_limits(env.config.dynamics)
+    env.close()
+    flown = read_trajectories(paths)
+    for row in scored:
+        p = flown[row["seed"]].positions.astype(np.float32).astype(np.float64)[: row["steps"] + 1]
+        v = np.vstack([np.zeros(3), np.diff(p, axis=0) / 0.5])
+        a = np.diff(v, axis=0) / 0.5  # a[k - 1]: the acceleration of step k
+        over = np.flatnonzero((np.hypot(a[:, 0], a[:, 1]) > limits["xy"] + 1e-2)
+                              | (np.abs(a[:, 2]) > limits["z"] + 1e-2)) + 1
+        steps = acted[row["seed"]]
+        assert all(steps[k] or steps[k - 1] for k in over), (row["seed"], over.tolist())
+        assert row["within_acceleration_limits"] == (len(over) == 0), row["seed"]
+    assert any(not row["within_acceleration_limits"] for row in scored)  # the shield's steps exceed them
 
 
 def test_zero_step_rows_in_a_dynamic_protocol(world):
@@ -323,3 +395,12 @@ def test_evaluate_notes_trajectories_the_vehicle_could_not_fly(world, tmp_path, 
     out = capsys.readouterr()
     assert json.loads(out.out)["episodes_outside_speed_limits"] == 1
     assert "could not have been flown" in out.err and "episodes_outside_speed_limits: 1" in out.err
+    # from rest to 40 m/s in one step also exceeds the acceleration limits, which are noted apart
+    assert json.loads(out.out)["episodes_outside_acceleration_limits"] == 1
+    assert "1 trajectory accelerates faster" in out.err
+    gentle = write_trajectories_csv(tmp_path / "gentle.csv", [Trajectory(mission.seed, _ramp(mission.start,
+                                                                                               mission.target))])
+    assert main(["evaluate", "--protocol", "canonical-primary", "--trajectories", str(gentle), "--episodes", "1",
+                 "--output-dir", str(tmp_path / "gentle"), "--quiet"]) == 0
+    out = capsys.readouterr()
+    assert json.loads(out.out)["episodes_outside_acceleration_limits"] == 0 and "accelerate faster" not in out.err

@@ -201,6 +201,8 @@ def test_evaluate_policy_rejects_bad_settings(world):
     (["--planner", "STATIC_Astar", "--method", "GEO-RL"], "apply to --policy"),
     (["--policy", "p.zip", "--method", "PPO"], "unknown method"),
     (["--policy", "missing.zip", "--method", "GEO-RL"], "not found"),
+    (["--checkpoint", "GEO-RL/1001", "--archive", ".", "--algorithm", "SAC"], "--algorithm applies to --policy"),
+    (["--planner", "STATIC_Astar", "--algorithm", "SAC"], "--algorithm applies to --policy"),
 ])
 def test_cli_policy_errors(tmp_path, capsys, extra, message):
     world = [] if "--evaluation" in extra else ["--world", str(WORLD)]

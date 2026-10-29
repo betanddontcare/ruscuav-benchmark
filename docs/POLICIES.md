@@ -22,7 +22,8 @@ ckpt = archived_checkpoint("RISK+GREEN-RL/4001", archive="/data/RUSCUAV-v2.0.0")
 result = evaluate_policy(world, ckpt, "RISK+GREEN-RL", output_dir="runs/rg4001")
 print(result.summary["success_rate"], result.summary["mission_acceptability_rate"])
 
-# Your own Stable-Baselines3 checkpoint under the paper's protocol (docs/PROTOCOLS.md)
+# Your own Stable-Baselines3 checkpoint under the paper's protocol (docs/PROTOCOLS.md);
+# a checkpoint of another algorithm with algorithm="SAC" (A2C, SAC, TD3 or DDPG)
 result = evaluate_policy(world, "my_ppo.zip", "OBS-RL", protocol="canonical-primary")
 
 # ... or on recorded missions, in the stopping regime
@@ -72,10 +73,19 @@ ruscuav evaluate --protocol canonical-primary --checkpoint RISK+GREEN-RL/4001 --
     --output-dir runs/rg4001
 ruscuav evaluate --world my_city.npz --policy my_ppo.zip --method OBS-RL --episodes 50 \
     --regime secondary_operational_stopping --output-dir runs/my_city
+ruscuav evaluate --protocol canonical-primary --policy my_sac.zip --algorithm SAC --method RISK+GREEN-RL \
+    --output-dir runs/my_sac
 ruscuav evaluate --evaluation dynamic/DYN-OBS-RL/1001 --archive /data/RUSCUAV-v2.0.0 \
     --output-dir runs/archived
 ```
 
+`--policy` loads a PPO checkpoint, or with `--algorithm` one of A2C, SAC, TD3 or
+DDPG, the Stable-Baselines3 algorithms for continuous actions
+(`ruscuav_benchmark.policies.ALGORITHMS`); the configuration file records the
+algorithm of any but PPO. PPO and A2C checkpoints share their policy class, so
+either loads both; what is recorded is the algorithm given. A model of another
+library, or one already loaded, is evaluated from Python as any object with
+`predict`.
 `--checkpoint` flies an archived checkpoint in the preset it was trained in (or
 `--method`), with the settings it was trained with (`checkpoint_env_overrides`: the
 urban LiDAR off for `RISK+OBS-RL/no_urban_lidar`). `--evaluation` re-runs one of the

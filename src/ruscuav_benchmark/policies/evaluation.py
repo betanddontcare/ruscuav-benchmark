@@ -25,11 +25,14 @@ from .checkpoints import ARCHIVED_EVALUATIONS, archived_checkpoint, checkpoint_e
 from .rollout import ROW_FORMATS, run_policy_episode
 
 __all__ = [
-    "PolicyEvaluation", "load_policy", "evaluate_policy", "evaluate_archived", "default_row_format",
+    "PolicyEvaluation", "ALGORITHMS", "load_policy", "evaluate_policy", "evaluate_archived", "default_row_format",
     "default_label", "summarize_policy_rows",
 ]
 
-_RL_HINT = 'loading a PPO checkpoint needs the "rl" extra: pip install -e ".[rl]" in the repository'
+_RL_HINT = 'loading a Stable-Baselines3 checkpoint needs the "rl" extra: pip install -e ".[rl]" in the repository'
+#: Stable-Baselines3 algorithms whose checkpoints :func:`load_policy` loads: those for
+#: continuous actions, as the environment's (two horizontal accelerations).
+ALGORITHMS = ("PPO", "A2C", "SAC", "TD3", "DDPG")
 
 
 @dataclass
@@ -45,16 +48,24 @@ class PolicyEvaluation:
     paths: Dict[int, np.ndarray] = field(default_factory=dict)
 
 
-def load_policy(path: Union[str, Path], device: str = "cpu") -> Any:
-    """A Stable-Baselines3 PPO checkpoint (``.zip``), loaded for inference."""
+def load_policy(path: Union[str, Path], device: str = "cpu", algorithm: str = "PPO") -> Any:
+    """A Stable-Baselines3 checkpoint (``.zip``) of ``algorithm`` (one of
+    :data:`ALGORITHMS`; the archived checkpoints are PPO), loaded for inference. PPO
+    and A2C checkpoints share their policy class and load with either."""
+    if algorithm not in ALGORITHMS:
+        raise ValueError(f"unknown algorithm {algorithm!r}; available: {', '.join(ALGORITHMS)}")
     try:
-        from stable_baselines3 import PPO
+        import stable_baselines3
     except ModuleNotFoundError as exc:
         raise ModuleNotFoundError(f"{_RL_HINT} (missing {exc.name})", name=exc.name) from exc
     path = Path(path)
     if not path.is_file():
         raise FileNotFoundError(f"policy checkpoint not found: {path}")
-    return PPO.load(str(path), device=device)
+    try:
+        return getattr(stable_baselines3, algorithm).load(str(path), device=device)
+    except (KeyError, TypeError, AttributeError, RuntimeError) as exc:  # the policy of another algorithm
+        raise ValueError(f"{path} could not be loaded with {algorithm} ({type(exc).__name__}: {exc}); it may be "
+                         "a checkpoint of another algorithm") from exc
 
 
 def default_row_format(method: str) -> str:
@@ -229,11 +240,13 @@ def evaluate_policy(
     prefix: Optional[str] = None,
     save_paths: bool = False,
     progress: Optional[Callable[[int, int, Row], None]] = None,
+    algorithm: str = "PPO",
 ) -> PolicyEvaluation:
     """Fly ``policy`` in the environment of ``method`` (a preset of
     ``ruscuav_benchmark.env.METHOD_PRESETS``) on episodes of ``world``.
 
-    ``policy`` is a path to a Stable-Baselines3 checkpoint, a model with ``predict``,
+    ``policy`` is a path to a Stable-Baselines3 checkpoint (of ``algorithm``, one of
+    :data:`ALGORITHMS`, PPO by default), a model with ``predict`` (of any algorithm),
     or a callable ``obs -> action``; the method preset fixes the observation, so it
     must be the one the policy was trained with. Episodes are ``missions``
     (``(seed, reset options)``, e.g. from ``ruscuav_benchmark.scenarios.missions_from_csv``),
@@ -313,7 +326,9 @@ def evaluate_policy(
             raise FileNotFoundError(f"policy checkpoint not found: {policy_path}")
         policy_info = {"kind": "stable_baselines3_checkpoint", "path": str(policy_path),
                        "sha256": sha256_file(policy_path)}
-        policy = load_policy(policy_path)
+        if algorithm != "PPO":  # recorded for the others only: PPO runs keep the settings they had
+            policy_info["algorithm"] = algorithm
+        policy = load_policy(policy_path, algorithm=algorithm)
     _check_spaces(policy, config)
 
     world_id = canonical_aoi_id(world.aoi_id)

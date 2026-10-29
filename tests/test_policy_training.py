@@ -91,6 +91,29 @@ def test_cli_flies_a_policy(world, trained, tmp_path, capsys):
     assert csv_path.is_file() and csv_path.name.startswith("RISK+GREEN-RL_AOI_SYNTH_000_primary_no_terminal_")
 
 
+def test_checkpoints_of_other_algorithms(world, tmp_path, capsys):
+    from ruscuav_benchmark.cli import build_parser
+    from ruscuav_benchmark.env import make_env
+    from ruscuav_benchmark.policies import ALGORITHMS
+
+    model = sb3.SAC("MlpPolicy", make_env(world, "RISK+GREEN-RL"), seed=0, learning_starts=4, batch_size=4,
+                    buffer_size=64, policy_kwargs={"net_arch": [16, 16]})
+    path = tmp_path / "sac.zip"
+    model.learn(total_timesteps=8).save(path)
+    result = evaluate_policy(world, path, "RISK+GREEN-RL", seeds=[5003], max_steps=5, algorithm="SAC")
+    assert result.rows[0]["steps"] == 5 and result.summary["policy"]["algorithm"] == "SAC"
+    assert type(load_policy(path, algorithm="SAC")).__name__ == "SAC"
+    with pytest.raises(ValueError, match="could not be loaded with PPO"):
+        load_policy(path)
+    with pytest.raises(ValueError, match="unknown algorithm"):
+        load_policy(path, algorithm="DQN")
+    code = cli_main(["evaluate", "--world", str(WORLD), "--policy", str(path), "--algorithm", "SAC", "--method",
+                     "RISK+GREEN-RL", "--episodes", "1", "--seed0", "5003", "--output-dir", str(tmp_path), "--quiet"])
+    assert code == 0 and json.loads(capsys.readouterr().out)["n_episodes"] == 1
+    evaluate = build_parser()._subparsers._group_actions[0].choices["evaluate"]
+    assert next(a for a in evaluate._actions if a.dest == "algorithm").choices == ALGORITHMS
+
+
 @pytest.mark.skipif(not ARCHIVE, reason="needs RUSCUAV_ARCHIVE (the extracted v2.0.0 archive)")
 @pytest.mark.parametrize("name", ["static/RISK+GREEN-RL/4001", "dynamic/DYN-OBS-RL/1001"])
 def test_archived_checkpoint_reproduces_its_first_episodes(name):

@@ -402,7 +402,20 @@ def test_protocol_files_round_trip_and_are_checked(tmp_path):
     (folder / "w.npz").write_bytes(WORLD.read_bytes())
     data["world"]["file"] = "w.npz"
     (folder / "p.json").write_text(json.dumps(data), encoding="utf-8")
-    assert find_world(load_protocol(folder / "p.json")) == folder / "w.npz"
+    moved = load_protocol(folder / "p.json")
+    assert find_world(moved) == folder / "w.npz"
+    # the digest is the content's: neither the world file's location nor the description count
+    assert moved.world_file == "w.npz" and moved.digest() == p.digest()
+    described = json.loads(json.dumps(data))
+    described["description"] = "another description"
+    assert Protocol.from_dict(described).digest() == p.digest()
+    for change in (lambda d: d["missions"][0]["target"].__setitem__(0, d["missions"][0]["target"][0] + 1.0),
+                   lambda d: d["budgets"].update(ped_s=10.0),
+                   lambda d: d["world"].update(layers_sha256="0" * 64),
+                   lambda d: d.update(name="another-name")):
+        changed = json.loads(json.dumps(data))
+        change(changed)
+        assert Protocol.from_dict(changed).digest() != p.digest()
 
 
 def test_protocol_settings_and_seed_checks():
