@@ -139,7 +139,12 @@ def test_golden_episodes_of_the_notebook_planners(world, case_index):
         row, _ = run_dynamic_episode(env, planner, case["seed"])
 
     expected = case["row"]
-    assert list(row) == list(expected)
+    keys = list(expected)
+    if spec.kind == "dynamic":
+        # the package's rows of the dynamic planner add the building time, which the notebook's left out
+        keys.insert(keys.index("sidewalk_time") + 1, "building_time")
+        assert row["building_time"] == float(env.exposure.building_time)
+    assert list(row) == keys
     for key, value in expected.items():
         if key in TIMING_KEYS:
             continue

@@ -284,6 +284,8 @@ def summarize_planner_rows(rows: List[Row], kind: str) -> Dict[str, Any]:
             "mean_sensitive_time": _mean(rows, "sensitive_time"),
             "mean_hard_violation_steps": _mean(rows, "urban_hard_violation_steps"),
         })
+        if any("building_time" in row for row in rows):  # the archive's rows of the dynamic planner have none
+            s["mean_building_time"] = _mean(rows, "building_time")
     else:
         s.update({
             "mean_urban_max_risk": _mean(rows, "urban_max_risk"),

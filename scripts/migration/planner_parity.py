@@ -124,8 +124,14 @@ def _same(a, b) -> bool:
     return type(a) is type(b) and a == b
 
 
+#: Columns the package's rows add to the notebook's: the dynamic planner's building time
+#: (docs/PLANNERS.md).
+ADDED_KEYS = ("building_time",)
+
+
 def compare_rows(ref: dict, new: dict) -> List[str]:
     problems = []
+    new = {key: value for key, value in new.items() if key in ref or key not in ADDED_KEYS}
     if list(ref) != list(new):
         problems.append(f"row keys differ: {list(ref)} vs {list(new)}")
     for key in ref:

@@ -291,7 +291,10 @@ produced the archive, not from the port. The 200 episodes of one planner take 3â
 minutes on one core (70â€“90 minutes before the vectorized LiDAR).
 
 For the dynamic planner, `legacy_parity.py` applies the archived evaluation's
-post-hoc step with the notebook's functions (docs/PLANNERS.md). From the archived
+post-hoc step with the notebook's functions (docs/PLANNERS.md). The archived rows of
+the dynamic planner have no `building_time`, so that step left out the building
+budget; the package's rows have it, and none of the 200 flights exceeds the budget
+(at most 6.5 s over buildings, against 15 s), so the archived acceptability stands. From the archived
 episode rows, `summarize_planner_rows` gives the values of the archived summaries
 exactly: every statistic of the static and receding planners' summaries, and the
 14 it computes of the dynamic planner's summary (which adds conditional
@@ -537,17 +540,22 @@ start) end as `ended`, with the same steps and exposure. The estimated cargo hea
 stays within 1.4e-6 of the environment's except in two episodes that flew along the
 edge of the workspace (seed 5135 for 9 positions, seed 5158 for 5): there the
 environment clips the position at the edge but keeps the velocity pointing out of
-the workspace, so its cargo model sees accelerations that the positions do not have.
-No mission-acceptability verdict changed. All 1,800 episodes are within the
-vehicle's speed limits and workspace. (The scorer's acceleration check came after
-these runs; the script now reports the episodes outside the acceleration limits
-too, which in the environment's flights are steps its geometric shield or the
-workspace bounds shortened: docs/TRAJECTORIES.md.) The scorer counts 7 steps, in 6 episodes (two
-each of the three policies), as moving into a hazard between two positions: in each
-the environment's geometric shield had shortened the step, and the samples of the
-flown segment found a sliver of a sensitive zone below its overflight altitude that
+the workspace, so the positions stop at once while the environment's velocity does
+not, and the estimate, which counts those stops, is lower than the environment's
+value (0.9206 against 0.9233 and 0.9498 against 0.9589).
+No mission-acceptability verdict changed, and none of the 1,800 episodes ends as
+infeasible (docs/TRAJECTORIES.md): all are within the vehicle's speed limits and
+workspace, and no step runs through a hazard over 1 m. In 6 episodes, two of each
+policy, a step that the environment's geometric shield had shortened crosses a
+sliver of a sensitive zone below its overflight altitude (0.73 m long at most) that
 the shield's samples along the commanded segment had skipped
-(`scripts/migration/shield_steps.py` replays them; docs/TRAJECTORIES.md).
+(`scripts/migration/shield_steps.py` replays them). The script also reports the
+episodes outside the acceleration limits, which in the environment's flights are
+steps that its geometric shield or the workspace bounds shortened: 20, 31, 21, 21,
+29 and 1 of the planners' runs, in the order of the table, and 140, 144 and 82 of
+the policies'. These are the results of the scorer of the 2.1.0 release, which ends the
+trajectories the vehicle could not have flown; the earlier runs, with the scorer
+that only noted them, gave the same table.
 
 ```bash
 python scripts/migration/trajectory_parity.py --archive /path/to/RUSCUAV-v2.0.0 --work runs/trajectory_parity \

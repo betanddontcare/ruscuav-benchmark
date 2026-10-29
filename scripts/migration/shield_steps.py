@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Replay steps of an archived policy and show what the geometric shield did on them.
 
-The trajectory scorer counts a step as moving into a hazard when the segment between
-two positions, sampled every metre, has an unsafe sample (docs/TRAJECTORIES.md). On a
-step that the environment's geometric shield shortened, the shield sampled the
-commanded segment, and the scorer samples the shorter flown one at other points. This
-script flies a checkpoint under a protocol up to the given steps and prints, for
-each, whether the shield shortened it, the commanded and the flown length, and where
-the first unsafe sample of each segment lies (as a fraction of the segment).
+Where the segment between two positions, sampled every metre, has an unsafe sample,
+the trajectory scorer measures the longest stretch of the segment in a hazard, and
+from 1 m on ends the episode as infeasible (docs/TRAJECTORIES.md). On a step that the
+environment's geometric shield shortened, the shield sampled the commanded segment,
+and the scorer samples the shorter flown one at other points. This script flies a
+checkpoint under a protocol up to the given steps and prints, for each, whether the
+shield shortened it, the commanded and the flown length, where the first unsafe
+sample of each segment lies (as a fraction of the segment) and the longest stretch
+of the flown segment in a hazard.
 
     python scripts/migration/shield_steps.py --archive /data/RUSCUAV-v2.0.0 --protocol canonical-primary \\
         --checkpoint GEO-RL/1001 5013:47 5185:166
@@ -29,6 +31,7 @@ from ruscuav_benchmark.policies import (ARCHIVED_CHECKPOINTS, archived_checkpoin
                                         checkpoint_env_overrides, load_policy)
 from ruscuav_benchmark.policies.rollout import policy_action  # noqa: E402
 from ruscuav_benchmark.protocols import load_protocol, protocol_world  # noqa: E402
+from ruscuav_benchmark.trajectories import hazard_run_m  # noqa: E402
 
 
 def main() -> int:
@@ -74,7 +77,8 @@ def main() -> int:
         print(f"seed {seed} step {step}: shortened by the shield {shielded}; commanded {np.linalg.norm(b - a):.3f} m, "
               f"first unsafe sample at {shield.first_hit_on_segment(a, b)}; "
               f"flown {np.linalg.norm(accepted - a):.3f} m, "
-              f"first unsafe sample at {shield.first_hit_on_segment(a, accepted)}")
+              f"first unsafe sample at {shield.first_hit_on_segment(a, accepted)}, "
+              f"{hazard_run_m(env.hazards, a, accepted):.3f} m of it in a hazard")
         env.close()
     return 0
 

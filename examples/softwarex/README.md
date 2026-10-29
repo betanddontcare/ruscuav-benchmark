@@ -50,12 +50,14 @@ comparisons of each world (discordant missions, p, Holm-adjusted p):
 - **Vienna failures.** GEO_SHORTEST fails 6 Vienna missions: their targets cannot be reached at its cruise
   altitude, so its trajectory stays at the start.
 - **Trajectories.** All its trajectories keep to the vehicle's speed and acceleration limits and its
-  workspace, and none steps into a hazard.
+  workspace, and none enters a hazard: none ends as infeasible.
 
 The rates of the planners in the synthetic world are the archived results of the paper's study.
 
 The Vienna rows come from the study's processed Vienna world (`vienna_prater_leopoldstadt_osm_1km_v1_footway_only`,
-layers checksum `fa99c571…`). That world is not distributed (docs/OSM_ATTRIBUTION.md); `ruscuav build-aoi
---preset vienna` builds a world of the same area, which gives these rows only if it has the same checksum.
+layers checksum `fa99c571…`). That world is not in the repository (docs/OSM_ATTRIBUTION.md); it is published
+apart, under the ODbL, with the release (docs/RELEASING.md), and `example2.sh --world` with it gives these rows.
+`ruscuav build-aoi --preset vienna` builds a world of the same area, which gives them only if it has the same
+checksum.
 For another city, choose the mission of Fig. 2 (b) and give it to `figures.sh`; a world built with
 `example2.sh --center` is `runs/softwarex/city/world.npz`.

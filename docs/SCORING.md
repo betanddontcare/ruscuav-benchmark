@@ -49,6 +49,39 @@ scored with the protocol's budgets and acceptability (dynamic acceptability in
 every run the protocol's regime. Without a protocol the paper's budgets apply and
 runs whose rows have `dynamic_cumulative_risk` are scored as dynamic.
 
+The archive's post-processing counted a missing column or cell as within its
+budget, so a CSV without `sidewalk_time`, or with the column misspelled, would be
+scored as if its missions had kept the pedestrian budget. With or without a
+protocol, `ruscuav score` therefore refuses a CSV given on its command line
+(`ruscuav_benchmark.scoring.check_run`)
+
+- without a column that mission acceptability reads: `is_success`,
+  `cargo_health`, `road_time`, `sidewalk_time`, `building_time`, `sensitive_time`,
+  a count of hard violations (`urban_hard_violation_steps` or
+  `hard_violation_steps`) and, in a dynamic run, `dynamic_cumulative_risk`
+  (`scoring.missing_columns`), required also when other columns of the dynamic
+  evaluations (`dynamic_...`, `mission_acceptable_static_only`) are there, since
+  without a protocol a run is dynamic when it has that column;
+- with an `is_success` that is not true or false (`True`/`False`, `1`/`0`,
+  `yes`/`no`, ...);
+- with a successful episode that has no finite number in one of those columns, a
+  cargo health outside 0 to 1, or a negative time or count (an unsuccessful episode
+  is not acceptable, whatever its other cells);
+- of trajectories scored by a development version of 2.1.0, which did not end the
+  trajectories that the vehicle could not have flown (docs/TRAJECTORIES.md): score
+  them again.
+
+The runs of a registry are scored as the archive scored them, and a missing column
+is noted: the archived rows of the dynamic planner have no `building_time`, so the
+archive's acceptability of that planner leaves out the building budget (none of
+its flights exceeds it; docs/PLANNERS.md). So are trajectories that an earlier
+development version scored.
+
+For runs of scored trajectories (`ruscuav evaluate --trajectories`), `score.json`
+reports the episodes ended as infeasible, by reason, those outside the acceleration
+limits and the sources of the cargo health (`scoring.trajectory_checks`), and the
+command notes them.
+
 `--compare` declares comparisons: `A:B:METRIC` (repeatable, one family), or a CSV
 with the columns `family`, `comparison_id`, `method_a`, `method_b`, `metric` and
 optionally `claim_driving`, as the paper's families
@@ -65,7 +98,7 @@ The output directory gets
 | `non_acceptability_causes.csv` | per run and cause | `paper_table_non_acceptability_cause_decomposition.csv` |
 | `dynamic_budget_sensitivity.csv` | per dynamic run and budget 2.5–35 | `paper_table_dynamic_budget_sensitivity.csv` |
 | `paired_tests_holm.csv` | per comparison | `paper_table_holm_full_families.csv` |
-| `score.json` | the inputs (the recorded and the local path, the SHA-256 of the file read), the protocol checks, the summaries and tests | |
+| `score.json` | the inputs (the recorded and the local path, the SHA-256 of the file read, the missing columns of a registry's run, the checks of scored trajectories), the protocol checks, the summaries and tests | |
 
 and the summary table is printed.
 
@@ -115,7 +148,8 @@ summaries would differ in the last digits.
 
 The tables read these columns of the per-episode rows; the CSVs of
 `ruscuav evaluate` have them (docs/PLANNERS.md, docs/POLICIES.md,
-docs/TRAJECTORIES.md):
+docs/TRAJECTORIES.md). Those that mission acceptability reads are required in the
+CSVs given to `ruscuav score` (above):
 
 | Column | Meaning |
 |---|---|
@@ -137,6 +171,8 @@ docs/TRAJECTORIES.md):
 from ruscuav_benchmark import scoring
 
 runs = [scoring.load_run("runs/mine.csv", "MINE"), scoring.load_run("runs/full.csv", "FULL")]
+for run in runs:
+    scoring.check_run(run)  # as ruscuav score checks the CSVs on its command line
 tables = scoring.score_runs(runs, comparisons=[
     {"family": "mine", "comparison_id": "mine_vs_full_SR", "method_a": "MINE", "method_b": "FULL",
      "metric": "success"}])

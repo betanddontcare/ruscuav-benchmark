@@ -20,7 +20,13 @@ steps.
    describes the upload of the v2.0.0 dataset archive, a version of another record.)
 6. **DOI.** Add the release's DOI to `CITATION.cff` (`doi`), `codemeta.json`
    (`identifier`), README.md ("Citation") and docs/SOFTWAREX_CODE_METADATA.md (C2).
-7. **PyPI (optional).** `twine upload dist/*`. Until then the package is installed from
+7. **The Vienna world.** The processed Vienna world of the paper's evaluations is
+   published apart, as a Zenodo dataset under the ODbL 1.0 with its attribution, and
+   with the protocol of the SoftwareX article's Example 2 (`city-example.json`). Its
+   DOI goes into README.md ("Repository and archive"), docs/OSM_ATTRIBUTION.md,
+   docs/BUILDING_WORLDS.md, worlds/real_gis/README.md and
+   examples/softwarex/README.md. It is never committed here.
+8. **PyPI (optional).** `twine upload dist/*`. Until then the package is installed from
    the repository (`pip install -e ".[env]"`; the messages about missing extras say so).
    The wheel does not hold the world of the canonical protocols
    (`worlds/synthetic/AOI_SYNTH_000/urban_world_layers.npz`, 14 MB), so after an install

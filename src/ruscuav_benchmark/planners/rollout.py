@@ -278,6 +278,8 @@ def run_dynamic_episode(env, planner: DynamicRecedingPlanner, seed: Optional[int
         "dynamic_budget_ok": bool(final_info.get("dynamic_budget_ok", False)),
         "road_time": float(final_info.get("urban_road_time", 0.0)),
         "sidewalk_time": float(final_info.get("urban_sidewalk_time", 0.0)),
+        # not in the archive's rows, whose post-hoc acceptability therefore left out the building budget
+        "building_time": float(final_info.get("urban_building_time", 0.0)),
         "green_time": float(final_info.get("urban_green_time", 0.0)),
         "sensitive_time": float(final_info.get("urban_sensitive_time", 0.0)),
         "urban_hard_violation_steps": int(final_info.get("urban_hard_violation_steps", 0)),

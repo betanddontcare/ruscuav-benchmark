@@ -221,6 +221,51 @@
 - Continuous integration also flies two missions with the installed package outside
   the checkout, the world given with `--world`, and scores their paths again as
   trajectories.
+- Trajectory scoring scores only what the environment's vehicle could have flown:
+  the episode ends as `infeasible`, neither a success nor acceptable, before the first
+  step faster than the vehicle's speed limits, outside its workspace, or that, from a
+  position outside the hazards, ends in one or runs through one over at least the
+  sampling spacing of the geometric shield (1 m in the protocols): steps the shield
+  would have stopped. Before, such
+  trajectories were only noted, and a trajectory flying from the start to the target
+  in one step scored as a success. The rows give the reason (`infeasible`) and the
+  longest stretch of a step through a hazard (`max_hazard_run_m`, `hazard_run_m()`),
+  in place of `hazard_segment_steps`; the summary counts `episodes_infeasible`,
+  `episodes_outside_speed_limits`, `episodes_outside_workspace` and
+  `episodes_through_hazards` (in place of `episodes_with_hazard_segments`). A cargo
+  health given with a trajectory is taken where it is at most the cargo model's
+  estimate (within 1e-3), the estimate where it is higher (`cargo_health_source`
+  `capped`, `cargo_health_capped`). None of the 1,800 episodes flown in the
+  environment and scored again ends as infeasible (docs/TRAJECTORIES.md).
+- `ruscuav score` refuses a CSV given on its command line without a column that
+  mission acceptability reads (the archive's post-processing counted a missing
+  column or cell as within its budget, so a misspelled column dropped a budget;
+  `dynamic_cumulative_risk` is also required when other columns of the dynamic
+  evaluations are there), with an `is_success` that is not true or false, with a
+  successful episode that has no number in those columns or values out of range, or
+  with trajectories scored by an earlier development version (`scoring.check_run`,
+  `scoring.missing_columns`). The runs of a registry are scored as before, with a
+  note of their missing columns and of trajectories scored by an earlier version.
+  `score.json` records these and, for runs of scored trajectories, the infeasible
+  episodes, those outside the acceleration limits and the sources of the cargo
+  health (`scoring.trajectory_checks`), which are also noted.
+- The rows of `DYN_RH_Astar` have `building_time`, and its summary
+  `mean_building_time`. The archived rows of the dynamic planner had none, so the
+  archive's post-hoc acceptability of that planner left out the building budget;
+  its flights stay within it (at most 6.5 s over buildings), so no verdict changes.
+  `scripts/legacy_parity.py --code package` and `scripts/migration/planner_parity.py`
+  compare the dynamic planner's rows with the archive's and the notebook's without
+  it.
+- The acceptability budgets have one definition, `posthoc.DEFAULT_BUDGETS`, from
+  which the defaults of `MissionConfig` and `metrics.ExposureBudgets` are taken.
+- Continuous integration runs the tests of the Stable-Baselines3 policies (job `rl`,
+  PyTorch for CPU).
+- The title in `CITATION.cff` and `.zenodo.json` is the manuscript's;
+  THIRD_PARTY_NOTICES.md names pyogrio, not Fiona; docs/ZENODO_UPLOAD.md says that
+  `zenodo_metadata.json` is in the v2.0.0 archive. The processed Vienna world of the
+  paper's evaluations is to be published apart, as a dataset under the ODbL, with the
+  release (docs/RELEASING.md); README.md, docs/OSM_ATTRIBUTION.md, codemeta.json and
+  examples/softwarex/README.md say so.
 
 ## 2.0.0 — 2026-07-24
 

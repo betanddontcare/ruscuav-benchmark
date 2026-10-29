@@ -76,8 +76,10 @@ ruscuav score --protocol canonical-primary MINE=runs/mine/MINE_canonical-primary
     --compare MINE:FULL_RH:success --compare MINE:FULL_RH:MAR_static --output-dir runs/score
 ```
 
-`--episodes 20` flies the first 20 missions only (the files then end in
-`_n20_episodes.csv`). A city of your own:
+A trajectory is scored as far as the benchmark's vehicle could have flown it: a step
+faster than its speed limits, outside its workspace or through a hazard fails the
+mission (docs/TRAJECTORIES.md). `--episodes 20` flies the first 20 missions only
+(the files then end in `_n20_episodes.csv`). A city of your own:
 
 ```bash
 ruscuav build-aoi --center 50.0614,19.9366 --aoi-id krakow --download \
@@ -152,7 +154,7 @@ tests/                   the test suite
 docs/                    guides
 scripts/                 tools and checks against the archive (scripts/README.md)
 worlds/synthetic/        the four synthetic worlds (AOI_SYNTH_000, AOI_SYNTH_001-003)
-worlds/real_gis/         metadata of the Vienna and Warsaw worlds (the worlds are not distributed)
+worlds/real_gis/         metadata of the Vienna and Warsaw worlds (the worlds are not in the repository)
 scenarios/               the recorded missions of the canonical and Vienna evaluations
 configs/                 the settings of the archived experiments (configs/README.md)
 code/submission_repair/  the code of the archived one-click repair runs
@@ -178,12 +180,14 @@ sha256sum -c SHA256SUMS
 
 ## Real-GIS worlds and OpenStreetMap
 
-The processed Vienna and Warsaw worlds are not distributed. `ruscuav build-aoi
---preset vienna` (or `warsaw`) rebuilds them from OpenStreetMap data, and
-`scenarios/real_gis/` records the missions and the layers checksum of the paper's
-Vienna world (docs/BUILDING_WORLDS.md, worlds/real_gis/README.md). OpenStreetMap data are
-© OpenStreetMap contributors under the ODbL; worlds built from them are derived
-databases (docs/OSM_ATTRIBUTION.md).
+The processed Vienna and Warsaw worlds are not in this repository. The Vienna world
+of the paper's evaluations is published apart, as a dataset under the ODbL, with the
+release (docs/RELEASING.md); the Warsaw footway-only world of the archived runs was
+never saved. `ruscuav build-aoi --preset vienna` (or `warsaw`) builds a world of the
+same area from OpenStreetMap data, and `scenarios/real_gis/` records the missions and
+the layers checksum of the paper's Vienna world (docs/BUILDING_WORLDS.md,
+worlds/real_gis/README.md). OpenStreetMap data are © OpenStreetMap contributors under
+the ODbL; worlds built from them are derived databases (docs/OSM_ATTRIBUTION.md).
 
 ## Tests
 

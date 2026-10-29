@@ -325,6 +325,75 @@ def test_score_runs_writes_the_tables(tmp_path):
         scoring.paired_outcomes(duplicate)
 
 
+def test_runs_are_checked_before_scoring(tmp_path, capsys):
+    """A missing column or cell would count as within its budget (as in the archive's post-processing):
+    the runs given to ruscuav score are refused instead, those of a registry noted."""
+    from ruscuav_benchmark.cli import main
+
+    rows = _synthetic_rows(random.Random(3), n=20)
+    good = scoring.Run("A", rows)
+    scoring.check_run(good)
+    assert scoring.missing_columns(good) == [] and scoring.trajectory_checks(good) is None
+    for key in ("is_success", "cargo_health", "sidewalk_time", "urban_hard_violation_steps"):
+        run = scoring.Run("A", [{k: v for k, v in r.items() if k != key} for r in rows])
+        assert scoring.missing_columns(run) == [key]
+        with pytest.raises(ValueError, match=f"no column {key}"):
+            scoring.check_run(run)
+    other_name = [{**{k: v for k, v in r.items() if k != "urban_hard_violation_steps"},
+                   "hard_violation_steps": r["urban_hard_violation_steps"]} for r in rows]
+    scoring.check_run(scoring.Run("A", other_name))  # the archive's other name of the count
+    assert scoring.missing_columns(scoring.Run("D", rows, dynamic=True)) == ["dynamic_cumulative_risk"]
+    # without a protocol a run is dynamic when it has dynamic_cumulative_risk: a misspelled one would drop the
+    # dynamic budget, so the other columns of the dynamic evaluations require it
+    misspelled = scoring.Run("D", [dict(r, dynamic_budget_ok=False, dynamic_cumulative_risks=50.0) for r in rows])
+    assert not misspelled.dynamic and scoring.missing_columns(misspelled) == ["dynamic_cumulative_risk"]
+    with pytest.raises(ValueError, match="no column dynamic_cumulative_risk"):
+        scoring.check_run(misspelled)
+    successful = next(i for i, r in enumerate(rows) if r["is_success"])
+    for key, value, message in (("is_success", "1.0", "not true or false"), ("is_success", None, "not true or false"),
+                                ("road_time", None, "without a number in road_time"),
+                                ("road_time", float("nan"), "without a number in road_time"),
+                                ("sidewalk_time", "n/a", "without a number in sidewalk_time"),
+                                ("sidewalk_time", float("inf"), "without a number in sidewalk_time"),
+                                ("building_time", True, "without a number in building_time"),
+                                ("cargo_health", 1.2, "not from 0 to 1"),
+                                ("building_time", -1.0, "negative building_time")):
+        bad = [dict(r) for r in rows]
+        bad[successful][key] = value
+        with pytest.raises(ValueError, match=message):
+            scoring.check_run(scoring.Run("A", bad))
+    loose = [dict(r) for r in rows]
+    loose[next(i for i, r in enumerate(rows) if not r["is_success"])]["cargo_health"] = None
+    scoring.check_run(scoring.Run("A", loose))  # an unsuccessful episode is not acceptable whatever its cells
+    # scored trajectories: without the infeasible column, rows of a development version
+    with pytest.raises(ValueError, match="development version"):
+        scoring.check_run(scoring.Run("T", [dict(r, cargo_health_source="estimated") for r in rows]))
+    scored = scoring.Run("T", [dict(r, cargo_health_source="capped" if i % 2 else "given",
+                                    infeasible="speed" if i < 3 else None, within_acceleration_limits=i >= 5)
+                               for i, r in enumerate(rows)])
+    scoring.check_run(scored)
+    assert scoring.trajectory_checks(scored) == {
+        "episodes": 20, "earlier_version": False, "infeasible": 3, "infeasible_by_reason": {"speed": 3},
+        "outside_acceleration_limits": 5, "cargo_health": {"capped": 10, "given": 10}}
+    # on the command line
+    full = _write(tmp_path, "full_episodes", rows)
+    short = _write(tmp_path, "short_episodes", [{k: v for k, v in r.items() if k != "building_time"} for r in rows])
+    out = tmp_path / "score"
+    assert main(["score", f"A={full}", f"B={short}", "--output-dir", str(out)]) == 2
+    assert "run 'B' has no column building_time" in capsys.readouterr().err
+    old = _write(tmp_path, "old_episodes", [dict(r, cargo_health_source="given") for r in rows])
+    registry = tmp_path / "registry.csv"
+    registry.write_text(f"label,csv_path\nA,{full.name}\nB,{short.name}\nT,{old.name}\n", encoding="utf-8")
+    assert main(["score", "--registry", str(registry), "--output-dir", str(out)]) == 0
+    err = capsys.readouterr().err
+    assert "run 'B' of the registry has no building_time; a missing column" in err
+    assert "run 'T': trajectories scored by a development version" in err
+    report = json.loads((out / "score.json").read_text(encoding="utf-8"))
+    assert [r["missing_columns"] for r in report["runs"]] == [[], ["building_time"], []]
+    assert [r["trajectories"] for r in report["runs"]][:2] == [None, None]
+    assert report["runs"][2]["trajectories"]["earlier_version"] is True
+
+
 @pytest.mark.skipif(not ARCHIVE, reason="needs RUSCUAV_ARCHIVE (the extracted v2.0.0 archive)")
 def test_paper_tables_reproduce_the_archived_files(tmp_path):
     scipy = pytest.importorskip("scipy")

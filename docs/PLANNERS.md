@@ -147,10 +147,14 @@ The rows have the columns of the archived rollouts of each planner kind:
 - all: `episode`, `seed`, `total_reward`, `steps`, `termination`, `is_success`,
   `mission_acceptable`, `dist_xy` (final distance to the target), `cargo_health`,
   `urban_mean_risk`, `urban_cumulative_risk`, the exposure times `road_time`,
-  `sidewalk_time` (pedestrian ways), `green_time` and `sensitive_time` in seconds,
-  and `urban_hard_violation_steps`;
-- static and receding planners also: `urban_max_risk`, `building_time`,
-  `canopy_time`, `building_collision_steps`, `canopy_collision_steps`,
+  `sidewalk_time` (pedestrian ways), `building_time`, `green_time` and
+  `sensitive_time` in seconds, and `urban_hard_violation_steps`. The archived rows
+  of the dynamic planner had no `building_time`, so the archive's post-hoc
+  acceptability of that planner left out the building budget; none of its 200
+  flights exceeds it (at most 6.5 s over buildings, against 15 s), so its verdicts
+  stand;
+- static and receding planners also: `urban_max_risk`, `canopy_time`,
+  `building_collision_steps`, `canopy_collision_steps`,
   `sensitive_low_altitude_violation_steps`;
 - static planner: `planner_success`, `planner_reason`, `planner_cost`,
   `planner_expanded`, `planned_path_length`;

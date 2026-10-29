@@ -23,4 +23,4 @@ package are archived from GitHub releases with the metadata of `.zenodo.json`
 11. Reserve the new DOI if it must be inserted into the manuscript before publication. Do not enter the previous version DOI as the DOI of the new upload.
 12. Set the manuscript PDF as the default preview, save the draft, inspect Preview, and only then publish.
 
-Zenodo supports multiple licenses for mixed-license uploads. The package includes machine-readable metadata in `.zenodo.json`, `zenodo_metadata.json`, `CITATION.cff` and `codemeta.json`.
+Zenodo supports multiple licenses for mixed-license uploads. The v2.0.0 archive holds its machine-readable metadata in `zenodo_metadata.json`, `CITATION.cff` and `codemeta.json`; this repository holds those of the package in `.zenodo.json`, `CITATION.cff` and `codemeta.json`.

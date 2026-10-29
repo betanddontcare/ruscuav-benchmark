@@ -7,18 +7,21 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
+from .posthoc import DEFAULT_BUDGETS
 from .risk import UrbanRiskModel
 from .world import UrbanWorldLayers
 
 
 @dataclass(frozen=True)
 class ExposureBudgets:
-    cargo_min: float = 0.80
-    road_budget_s: float = 20.0
-    sidewalk_budget_s: float = 5.0
-    building_budget_s: float = 15.0
-    sensitive_budget_s: float = 0.0
-    dynamic_budget: float = 10.0
+    """The paper's budgets (``ruscuav_benchmark.posthoc.DEFAULT_BUDGETS``) and success radius."""
+
+    cargo_min: float = DEFAULT_BUDGETS["cargo_min"]
+    road_budget_s: float = DEFAULT_BUDGETS["road_s"]
+    sidewalk_budget_s: float = DEFAULT_BUDGETS["ped_s"]
+    building_budget_s: float = DEFAULT_BUDGETS["building_s"]
+    sensitive_budget_s: float = DEFAULT_BUDGETS["sensitive_s"]
+    dynamic_budget: float = DEFAULT_BUDGETS["dynamic"]
     success_radius_m: float = 30.0
 
 

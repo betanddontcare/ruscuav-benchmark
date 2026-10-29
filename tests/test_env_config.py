@@ -74,3 +74,20 @@ def test_profiles_and_dynamic_configurations_are_accepted_in_every_form():
 def test_invalid_configurations_are_rejected_when_built(make, match):
     with pytest.raises((ValueError, TypeError), match=match):
         make()
+
+
+def test_acceptability_budgets_have_one_definition():
+    """The environment's own verdict, the v2.0.0 path metrics and the paper's dynamic configuration use the
+    budgets of the post-hoc step (the packaged protocols record them: tests/test_scoring.py)."""
+    from ruscuav_benchmark.metrics import ExposureBudgets
+    from ruscuav_benchmark.posthoc import DEFAULT_BUDGETS
+    from ruscuav_benchmark.protocols import _MISSION_FIELDS
+
+    mission = MissionConfig()
+    assert {key: getattr(mission, name) for key, name in _MISSION_FIELDS} == {
+        key: value for key, value in DEFAULT_BUDGETS.items() if key != "dynamic"}
+    assert REPORTED_DYNAMIC_CONFIG.dynamic_cumulative_risk_budget == DEFAULT_BUDGETS["dynamic"]
+    b = ExposureBudgets()
+    assert (b.cargo_min, b.road_budget_s, b.sidewalk_budget_s, b.building_budget_s, b.sensitive_budget_s,
+            b.dynamic_budget) == tuple(DEFAULT_BUDGETS[key] for key in ("cargo_min", "road_s", "ped_s",
+                                                                         "building_s", "sensitive_s", "dynamic"))

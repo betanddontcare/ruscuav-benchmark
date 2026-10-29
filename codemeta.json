@@ -4,7 +4,7 @@
   "name": "RUSCUAV",
   "identifier": "ruscuav-benchmark",
   "version": "2.1.0",
-  "description": "RUSCUAV is a benchmark for low-altitude urban cargo-UAV navigation that scores missions by semantic mission acceptability as well as by target-reaching success. The ruscuav-benchmark package provides validated world files, a Gymnasium environment, the risk-cost A* planners and PPO policies of the paper, evaluation protocols with fixed missions, scoring of any method's trajectories, the paper's statistics, and a builder of worlds from OpenStreetMap data. The archived evaluations, trained weights and paper-ready tables are in the Zenodo record; processed Vienna and Warsaw worlds are not distributed.",
+  "description": "RUSCUAV is a benchmark for low-altitude urban cargo-UAV navigation that scores missions by semantic mission acceptability as well as by target-reaching success. The ruscuav-benchmark package provides validated world files, a Gymnasium environment, the risk-cost A* planners and PPO policies of the paper, evaluation protocols with fixed missions, scoring of any method's trajectories, the paper's statistics, and a builder of worlds from OpenStreetMap data. The archived evaluations, trained weights and paper-ready tables are in the Zenodo record; the processed Vienna and Warsaw worlds are not in the repository (the Vienna world is published apart under the ODbL).",
   "programmingLanguage": "Python",
   "runtimePlatform": "Python 3.10, 3.11, 3.12, 3.13",
   "license": [

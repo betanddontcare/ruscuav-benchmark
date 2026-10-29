@@ -261,6 +261,9 @@ def run_package_planner(ns, world_path, name: str, n: int, seed0: int, work: Pat
         rows = []
         for index, row in enumerate(result.rows):
             row = dict(row)
+            # the archived rows have no building time (the package's add it, docs/PLANNERS.md), so the archive's
+            # derived metrics and acceptability were computed without it: compare with them as they were
+            row.pop("building_time", None)
             row["evaluation_regime"] = ns.PRIMARY_NO_TERMINAL.name
             path = result.paths[index]
             row["path_length_xy"] = float(np.linalg.norm(np.diff(path[:, :2], axis=0), axis=1).sum())

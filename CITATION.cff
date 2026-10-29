@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-title: "RUSCUAV: Semantic Mission-Acceptability Benchmark for Low-Altitude Urban Cargo-UAV Navigation"
+title: "RUSCUAV: A Semantic Mission-Acceptability Benchmark for Low-Altitude Urban Cargo UAV Navigation"
 message: "If you use this software, please cite it with these metadata and cite the associated manuscript."
 type: software
 authors:

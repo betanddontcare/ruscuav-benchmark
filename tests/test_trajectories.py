@@ -3,10 +3,9 @@
 Episodes flown in the environment are scored again from their saved paths: every
 column must come out as the environment recorded it, apart from the cargo health,
 which the scorer estimates from the positions, and the shield-stuck ending, which
-it cannot see; and none of their steps may count as unflyable (on these missions;
-see docs/TRAJECTORIES.md for the shield's shortened steps). Synthetic
-trajectories check the scoring rules and what the environment's vehicle could not
-fly. scripts/migration/trajectory_parity.py does the first for the archived
+it cannot see; and none of them may end as infeasible. Synthetic trajectories check
+the scoring rules and the steps the environment's vehicle could not fly, which end
+the episode. scripts/migration/trajectory_parity.py does the first for the archived
 evaluations.
 """
 
@@ -56,7 +55,7 @@ def test_scored_paths_reproduce_the_flown_rows(world, tmp_path, protocol, method
     for flown, ours in zip(result.rows, scored):
         assert ours["cargo_health_source"] == "estimated" and ours["positions_ignored"] == 0
         assert abs(ours["cargo_health"] - flown["cargo_health"]) < 1e-5
-        assert ours["hazard_segment_steps"] == 0 and ours["within_workspace"] and ours["termination_reported"] is None
+        assert ours["infeasible"] is None and ours["within_workspace"] and ours["termination_reported"] is None
         if flown["termination"] == "shield_stuck":
             assert ours["termination"] == "ended" and not ours["is_success"]
         for key, value in flown.items():
@@ -71,7 +70,7 @@ def test_trajectory_files_round_trip(world, tmp_path):
     from_dir = read_trajectories(paths)
     assert sorted(from_dir) == [5000, 5001]
     t = from_dir[5000]
-    t.cargo_health = np.linspace(1.0, 0.9, len(t.positions) - 1)
+    t.cargo_health = np.linspace(0.6, 0.5, len(t.positions) - 1)  # below the cargo model's estimate: taken
     t.termination = "landed"
     csv_path = write_trajectories_csv(tmp_path / "t.csv", from_dir.values())
     from_csv = read_trajectories(csv_path)
@@ -81,7 +80,7 @@ def test_trajectory_files_round_trip(world, tmp_path):
     np.savez(tmp_path / "t.npz", **{f"seed_{s}": v.positions for s, v in from_dir.items()})
     assert sorted(read_trajectories(tmp_path / "t.npz")) == [5000, 5001]
     rows = score_trajectories("canonical-primary", from_csv, world, n_episodes=2)
-    assert rows[0]["cargo_health_source"] == "given" and rows[0]["cargo_health"] == 0.9
+    assert rows[0]["cargo_health_source"] == "given" and rows[0]["cargo_health"] == 0.5
     assert rows[0]["termination_reported"] == "landed" and rows[1]["termination_reported"] is None
     bad = tmp_path / "bad.csv"
     bad.write_text("seed,step,x,y,z\n5000,0,1,2,3\n5000,2,1,2,3\n", encoding="utf-8")
@@ -134,7 +133,7 @@ def _ramp(start, target, acc=2.0, speed=10.0, dt=0.5):
 def test_scoring_rules_on_synthetic_trajectories(world):
     protocol = load_protocol("canonical-primary")
     env = trajectory_env(world, protocol)
-    mission = protocol.missions[0]
+    mission = protocol.missions[2]  # its straight line at the start's height passes no hazard
     options = mission.episode()[1]
     line = _line(mission.start, mission.target)
     row = score_trajectory(env, mission.seed, line, options=options)
@@ -152,10 +151,27 @@ def test_scoring_rules_on_synthetic_trajectories(world):
     climbing = score_trajectory(env, mission.seed, climb, options=options)
     assert climbing["within_speed_limits"] and not climbing["within_acceleration_limits"]
     assert abs(climbing["max_acc_z_mps2"] - 6.0) < 1e-3
-    # into the ground on the third step
-    ground = lambda k: (mission.start[2] if k < 3 else -50.0)  # noqa: E731
-    row = score_trajectory(env, mission.seed, _line(mission.start, mission.target, z=ground), options=options)
-    assert row["termination"] == "terrain_collision" and row["steps"] == 3 and not row["is_success"]
+    # straight down to the ground at the start (no other hazard there) in steps of 2.5 m (5 m/s): the last step
+    # runs 2 m through the terrain's clearance, which the geometric shield would have stopped
+    ground = env.risk_model.terrain_at(mission.start[0], mission.start[1])
+    agl0 = float(mission.start[2]) - ground
+    n_down = math.ceil(agl0 / 2.5)
+
+    def down(heights):
+        out = np.repeat(np.asarray([mission.start], float), len(heights) + 1, axis=0)
+        out[1:, 2] = ground + np.asarray(heights)
+        return out
+
+    row = score_trajectory(env, mission.seed, down([2.5 * (n_down - k) for k in range(1, n_down + 1)]),
+                           options=options)
+    assert row["termination"] == "infeasible" and row["infeasible"] == "hazard" and not row["is_success"]
+    assert row["within_speed_limits"] and 1.9 < row["max_hazard_run_m"] < 2.1 and row["steps"] == n_down - 1
+    # a step that ends only 0.05 m into the clearance is infeasible too: the shield samples the end of the motion,
+    # so the environment's vehicle never ends a step from outside a hazard in one (then it could fly on unchecked)
+    heights = [agl0 - 2.5 * k for k in range(1, int((agl0 - 4.45) // 2.5) + 1)] + [4.45, 1.95, -0.5]
+    row = score_trajectory(env, mission.seed, down(heights), options=options)
+    assert row["termination"] == "infeasible" and row["infeasible"] == "hazard" and row["within_speed_limits"]
+    assert row["steps"] == len(heights) - 2 and 0.04 < row["max_hazard_run_m"] < 0.06
     # stopping short of the target: the method's own ending is reported, not taken
     row = score_trajectory(env, mission.seed, line[:4], options=options, termination="landed")
     assert row["termination"] == "ended" and row["termination_reported"] == "landed" and row["steps"] == 3
@@ -163,16 +179,32 @@ def test_scoring_rules_on_synthetic_trajectories(world):
     for short in (line[:1], line[:5]):  # claiming success does not make one
         row = score_trajectory(env, mission.seed, short, options=options, termination="success")
         assert row["termination"] == "ended" and not row["is_success"] and not row["mission_acceptable"]
-        assert row["termination_reported"] == "success" and row["dist_xy"] > 700.0
+        assert row["termination_reported"] == "success" and row["dist_xy"] > 600.0
     still = score_trajectory(env, mission.seed, line[:1], options=options)  # no step: as the environment's rows
     assert still["termination"] == "ended" and still["steps"] == 0 and math.isnan(still["cargo_health"])
     assert math.isnan(still["urban_cumulative_risk"]) and still["road_time"] == 0.0
-    fast = _line(mission.start, mission.target, speed=40.0)
-    assert not score_trajectory(env, mission.seed, fast, options=options)["within_speed_limits"]
-    outside = line[:6].copy()
-    outside[5, 0] = -20.0  # beyond the workspace, which the environment's vehicle cannot leave
-    assert score_trajectory(env, mission.seed, outside, options=options, cargo_health=[1.0] * 5)[
-        "within_workspace"] is False
+    # faster than the vehicle can fly: the episode ends before the first such step
+    fast = score_trajectory(env, mission.seed, _line(mission.start, mission.target, speed=40.0), options=options)
+    assert fast["termination"] == "infeasible" and fast["infeasible"] == "speed" and fast["steps"] == 0
+    assert not fast["within_speed_limits"] and not fast["is_success"] and not fast["mission_acceptable"]
+    teleport = score_trajectory(env, mission.seed, np.array([mission.start, mission.target]), options=options,
+                                cargo_health=[1.0])  # straight to the target in one step
+    assert teleport["termination"] == "infeasible" and not teleport["is_success"] and teleport["max_speed_xy_mps"] > 1e3
+    # up through the ceiling of the workspace at 6 m/s
+    climb_out = line.copy()
+    climb_out[1:, 2] = line[0, 2] + 3.0 * np.arange(1, len(line))
+    out = score_trajectory(env, mission.seed, climb_out, options=options)
+    ceiling = float(env.bounds_high[2])
+    assert out["termination"] == "infeasible" and out["infeasible"] == "workspace" and not out["within_workspace"]
+    assert out["within_speed_limits"] and out["steps"] == int(np.argmax(climb_out[:, 2] > ceiling + 1e-3)) - 1
+    # cargo health: a given value is taken where it is at most the model's estimate, the estimate elsewhere
+    estimated = score_trajectory(env, mission.seed, line, options=options)["cargo_health"]
+    assert estimated < 1.0 - 1e-3  # the first step from rest to 10 m/s costs cargo health
+    claimed = score_trajectory(env, mission.seed, line, options=options, cargo_health=[1.0] * (len(line) - 1))
+    assert claimed["cargo_health_source"] == "capped" and claimed["cargo_health"] == estimated
+    lower = score_trajectory(env, mission.seed, line, options=options, cargo_health=[0.5] * (len(line) - 1))
+    assert lower["cargo_health_source"] == "given" and lower["cargo_health"] == 0.5
+    assert lower["is_success"] and not lower["mission_acceptable"]
     with pytest.raises(ValueError, match="starts at"):
         score_trajectory(env, mission.seed, line + 5.0, options=options)
     with pytest.raises(ValueError, match="shape"):
@@ -185,8 +217,8 @@ def test_scoring_rules_on_synthetic_trajectories(world):
     env.close()
     items = {mission.seed: Trajectory(mission.seed, line)}
     with pytest.raises(ValueError, match="no trajectory"):
-        score_trajectories(protocol, items, world, n_episodes=2)
-    assert len(score_trajectories(protocol, items, world, n_episodes=2, require_all=False)) == 1
+        score_trajectories(protocol, items, world, n_episodes=3)
+    assert len(score_trajectories(protocol, items, world, n_episodes=3, require_all=False)) == 1
     with pytest.raises(ValueError, match="not missions"):
         score_trajectories(protocol, {1: Trajectory(1, line)}, world)
     for n in (0, -1, 201):
@@ -194,41 +226,47 @@ def test_scoring_rules_on_synthetic_trajectories(world):
             score_trajectories(protocol, items, world, n_episodes=n)
 
 
-def _across_a_building(world, hazards):
-    """Two safe positions 5 m above the ground on either side of a building (the
-    segment between them enters it)."""
-    res = float(world.resolution_m)
-    ys, xs = np.nonzero(world.building_mask > 0.5)
-    for k in np.random.default_rng(0).permutation(len(xs))[:300]:
-        x, y = (xs[k] + 0.5) * res, (ys[k] + 0.5) * res
-        z = float(world.terrain_z[ys[k], xs[k]]) + 5.0
-        if not hazards.is_unsafe(np.array([x, y, z], np.float32)):
-            continue
-        ends = []
-        for sign in (-1.0, 1.0):
-            for d in np.arange(1.0, 80.0, 1.0):
-                p = np.array([x + sign * d, y, z], np.float32)
-                if not hazards.is_unsafe(p) and not hazards.is_unsafe(p + np.float32([sign * 2.0, 0.0, 0.0])):
-                    ends.append(p + np.float32([sign * 2.0, 0.0, 0.0]))
-                    break
-        if len(ends) == 2:
-            return ends[0], ends[1]
-    raise AssertionError("no building to cross")
+def _open_world(blocks, width=600, height=400):
+    """A flat world at 1 m with buildings 40 m tall in the cells of ``blocks``
+    ((x0, x1, y0, y1) ranges of columns and rows) and no other layer."""
+    zeros = np.zeros((height, width), np.float32)
+    building = zeros.copy()
+    for x0, x1, y0, y1 in blocks:
+        building[y0:y1, x0:x1] = 1.0
+    tall = building * 40.0
+    return UrbanWorldLayers(aoi_id="OPEN_TEST", crs="LOCAL", bbox=(0.0, 0.0, float(width), float(height)),
+                            resolution_m=1.0, terrain_z=zeros, surface_z=tall, height_above_ground=tall,
+                            building_mask=building, building_height=tall, building_roof_z=tall, road_mask=zeros,
+                            sidewalk_mask=zeros, green_mask=zeros, canopy_mask=zeros, canopy_height=zeros,
+                            canopy_top_z=zeros, canopy_density=zeros, sensitive_mask=zeros)
 
 
-def test_unflyable_steps_are_flagged(world):
-    protocol = load_protocol("canonical-primary")
-    env = trajectory_env(world, protocol)
-    mission = protocol.missions[0]
-    options = mission.episode()[1]
-    a, b = _across_a_building(world, env.hazards)
-    start = np.asarray(mission.start, np.float32)
-    # given cargo health: the jumps would break the estimated one
-    to_a = score_trajectory(env, mission.seed, np.array([start, a]), options=options, cargo_health=[1.0])
-    through = score_trajectory(env, mission.seed, np.array([start, a, b]), options=options, cargo_health=[1.0, 1.0])
-    assert through["steps"] == 2 and through["hazard_segment_steps"] == to_a["hazard_segment_steps"] + 1
-    assert through["building_collision_steps"] == to_a["building_collision_steps"]  # the positions are outside
-    assert not through["within_speed_limits"] and not through["within_acceleration_limits"]
+@pytest.mark.filterwarnings("ignore:RuscuavEnv defaults were calibrated")
+def test_steps_through_a_hazard_end_the_episode():
+    """At 30 m, between two positions outside the buildings: through a wall 3 m thick (the shield would have
+    stopped the step) and across the corner of a block (0.57 m of the motion inside it, less than the 1 m at
+    which the shield samples motion, so it could have let the step through)."""
+    from ruscuav_benchmark.trajectories import hazard_run_m
+
+    env = trajectory_env(_open_world([(150, 153, 50, 150), (200, 210, 20, 30)]), load_protocol("canonical-primary"))
+    wall = np.array([[140.0, 100.0, 30.0], [148.0, 100.0, 30.0], [156.0, 100.0, 30.0], [164.0, 100.0, 30.0]])
+    row = score_trajectory(env, 1, wall, options={"start": wall[0].tolist(), "target": [590.0, 100.0, 30.0]},
+                           cargo_health=[1.0] * 3)
+    assert row["termination"] == "infeasible" and row["infeasible"] == "hazard" and row["within_speed_limits"]
+    assert row["steps"] == 1 and row["positions_ignored"] == 2 and not row["is_success"]
+    assert row["building_collision_steps"] == 0  # the positions are outside the wall
+    assert abs(hazard_run_m(env.hazards, wall[1], wall[2]) - 3.0) < 1e-3
+    corner = np.array([[207.1, 32.5, 30.0], [212.6, 27.0, 30.0]])
+    assert abs(hazard_run_m(env.hazards, corner[0], corner[1]) - 0.4 * math.sqrt(2.0)) < 1e-3
+    row = score_trajectory(env, 2, corner, options={"start": corner[0].tolist(), "target": [590.0, 390.0, 30.0]})
+    assert row["termination"] == "ended" and row["infeasible"] is None and row["steps"] == 1
+    assert abs(row["max_hazard_run_m"] - 0.4 * math.sqrt(2.0)) < 1e-3
+    # 0.5 m into the wall, then on through it: the step that ends in the wall is infeasible, though its stretch in
+    # the wall is shorter than 1 m (after it, the motion would not be checked again)
+    into = np.array([[140.0, 100.0, 30.0], [146.0, 100.0, 30.0], [150.5, 100.0, 30.0], [156.0, 100.0, 30.0]])
+    row = score_trajectory(env, 3, into, options={"start": into[0].tolist(), "target": [590.0, 100.0, 30.0]})
+    assert row["termination"] == "infeasible" and row["infeasible"] == "hazard" and row["steps"] == 1
+    assert abs(row["max_hazard_run_m"] - 0.5) < 1e-3 and row["building_collision_steps"] == 0
     env.close()
 
 
@@ -278,7 +316,7 @@ def test_flown_accelerations_exceed_the_limits_only_where_the_shield_or_the_boun
 def test_zero_step_rows_in_a_dynamic_protocol(world):
     protocol = load_protocol("canonical-dynamic")
     env = trajectory_env(world, protocol)
-    mission = protocol.missions[0]
+    mission = protocol.missions[2]  # its straight line passes no hazard
     row = score_trajectory(env, mission.seed, np.array([mission.start]), options=mission.episode()[1])
     assert row["steps"] == 0 and math.isnan(row["dynamic_cumulative_risk"]) and math.isnan(row["dynamic_risk_mean"])
     assert row["dynamic_budget_ok"] is False and not row["mission_acceptable"] and not row["mission_acceptable_logged"]
@@ -387,17 +425,39 @@ def test_score_refuses_runs_of_another_protocol(world, tmp_path, capsys):
 
 def test_evaluate_notes_trajectories_the_vehicle_could_not_fly(world, tmp_path, capsys):
     protocol = load_protocol("canonical-primary")
-    mission = protocol.missions[0]
+    mission = protocol.missions[0]  # the first mission: --episodes 1
     fast = _line(mission.start, mission.target, speed=40.0)
     csv_path = write_trajectories_csv(tmp_path / "fast.csv", [Trajectory(mission.seed, fast)])
     assert main(["evaluate", "--protocol", "canonical-primary", "--trajectories", str(csv_path), "--episodes", "1",
                  "--output-dir", str(tmp_path / "fast"), "--quiet"]) == 0
     out = capsys.readouterr()
-    assert json.loads(out.out)["episodes_outside_speed_limits"] == 1
+    printed = json.loads(out.out)
+    assert printed["episodes_infeasible"] == printed["episodes_outside_speed_limits"] == 1
+    assert printed["success_rate"] == 0.0 and printed["termination_counts"] == {"infeasible": 1}
     assert "could not have been flown" in out.err and "episodes_outside_speed_limits: 1" in out.err
+    assert "its mission ends as 'infeasible'" in out.err
     # from rest to 40 m/s in one step also exceeds the acceleration limits, which are noted apart
-    assert json.loads(out.out)["episodes_outside_acceleration_limits"] == 1
+    assert printed["episodes_outside_acceleration_limits"] == 1
     assert "1 trajectory accelerates faster" in out.err
+    # ruscuav score reports both for the run
+    fast_rows = tmp_path / "fast" / "TRAJECTORY_canonical-primary_n1_episodes.csv"
+    assert main(["score", "--protocol", "canonical-primary", f"FAST={fast_rows}", "--output-dir",
+                 str(tmp_path / "score")]) == 0
+    out = capsys.readouterr()
+    assert "run 'FAST': 1 of its 1 trajectories ended as infeasible (speed: 1)" in out.err
+    assert "run 'FAST': 1 trajectories accelerate faster" in out.err
+    report = json.loads((tmp_path / "score" / "score.json").read_text(encoding="utf-8"))
+    assert report["runs"][0]["trajectories"] == {
+        "episodes": 1, "earlier_version": False, "infeasible": 1, "infeasible_by_reason": {"speed": 1},
+        "outside_acceleration_limits": 1, "cargo_health": {"estimated": 1}}
+    # a cargo health above the cargo model's estimate is noted
+    claimed = write_trajectories_csv(tmp_path / "claimed.csv", [Trajectory(
+        mission.seed, _line(mission.start, mission.target), cargo_health=np.ones(len(_line(mission.start,
+                                                                                         mission.target)) - 1))])
+    assert main(["evaluate", "--protocol", "canonical-primary", "--trajectories", str(claimed), "--episodes", "1",
+                 "--output-dir", str(tmp_path / "claimed"), "--quiet"]) == 0
+    out = capsys.readouterr()
+    assert json.loads(out.out)["cargo_health_capped"] == 1 and "1 trajectory gives a cargo health above" in out.err
     gentle = write_trajectories_csv(tmp_path / "gentle.csv", [Trajectory(mission.seed, _ramp(mission.start,
                                                                                                mission.target))])
     assert main(["evaluate", "--protocol", "canonical-primary", "--trajectories", str(gentle), "--episodes", "1",

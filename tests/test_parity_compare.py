@@ -63,3 +63,19 @@ def test_episode_counter_is_ignored():
     a = frame(episode=[100, 101], risk=[0.5, 1.5])
     b = frame(episode=[0, 1], risk=[0.5, 1.5])
     assert compare(a, b, atol=1e-9)["mismatches"] == []
+
+
+def test_planner_parity_leaves_out_the_added_building_time():
+    """The package's rows of the dynamic planner add building_time to the notebook's; the lockstep comparison
+    of scripts/migration/planner_parity.py leaves it out where the notebook's row has none."""
+    pytest.importorskip("gymnasium")
+    pytest.importorskip("scipy")
+    script = Path(__file__).resolve().parents[1] / "scripts" / "migration" / "planner_parity.py"
+    spec = importlib.util.spec_from_file_location("planner_parity", script)
+    planner_parity = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(planner_parity)
+    ref = {"seed": 5000, "sidewalk_time": 1.0, "green_time": 2.0}
+    new = {"seed": 5000, "sidewalk_time": 1.0, "building_time": 3.5, "green_time": 2.0}
+    assert planner_parity.compare_rows(ref, new) == []
+    assert planner_parity.compare_rows(ref, {**new, "other": 1}) != []  # any other added column still differs
+    assert planner_parity.compare_rows({**ref, "building_time": 3.5}, new) != []  # compared where the notebook has it

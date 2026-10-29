@@ -17,15 +17,20 @@ after the end are ignored. A trajectory that stops before any of these ends with
 ``termination_reported`` and decides nothing. The row has the columns of the
 primary evaluations (the ``posthoc`` format), so it is scored like any other run.
 
-Cargo health is taken from the trajectory when it has it, otherwise estimated with
-the environment's cargo model from the accelerations of the positions (finite
-differences, starting at rest). The rows also report what the environment's vehicle
-could not have flown: speeds above its limits, positions outside its workspace and
-steps whose motion enters a hazard between two positions, which the environment's
-geometric shield would have stopped; and accelerations above the limits of its
-commands, which the environment's own flights reach only where that shield, or the
-bounds of the workspace, stop or shorten a step. The action shield of the
-environment has no counterpart here, so ``shield_stuck`` cannot occur.
+Only what the environment's vehicle could have flown is scored: the episode ends
+with ``"infeasible"``, neither a success nor acceptable, before the first step that
+is faster than the vehicle's speed limits, leaves its workspace, or, from a position
+outside the hazards, ends in a hazard or moves through one over at least the
+sampling step of the environment's geometric shield (1 m in the protocols), which
+that shield would have stopped. Accelerations above the limits of the vehicle's
+commands are reported, not refused: the environment's own flights reach them where
+its geometric shield, or the bounds of the workspace, stop or shorten a step.
+
+Cargo health is the environment's cargo model applied to the accelerations of the
+positions (finite differences, starting at rest). A cargo health given with the
+trajectory is taken where it is at most that estimate (within 1e-3), the estimate
+where it is higher: it can lower the estimate, not raise it. The action shield of
+the environment has no counterpart here, so ``shield_stuck`` cannot occur.
 """
 
 from __future__ import annotations
@@ -42,13 +47,21 @@ from .posthoc import DEFAULT_BUDGETS, dynamic_acceptability, static_acceptabilit
 from .tables import Row
 
 __all__ = ["Trajectory", "read_trajectories", "write_trajectories_csv", "score_trajectory", "score_trajectories",
-           "trajectory_env", "acceleration_limits", "TrajectoryEvaluation", "evaluate_trajectories"]
+           "trajectory_env", "acceleration_limits", "hazard_run_m", "TrajectoryEvaluation", "evaluate_trajectories"]
 
 _SEED_IN_NAME = re.compile(r"seed_?(-?\d+)")
 #: Tolerance of the workspace bounds (m), for positions rounded to float32.
 _WORKSPACE_TOLERANCE_M = 1e-3
+#: Tolerance of the speed limits (m/s).
+_SPEED_TOLERANCE = 1e-3
 #: Tolerance of the acceleration limits (m/s^2): finite differences of float32 positions.
 _ACCELERATION_TOLERANCE = 1e-2
+#: Spacing (m) of the samples that find where a step moves through a hazard, and the
+#: precision (m) to which the ends of each stretch in a hazard are then located.
+_HAZARD_SAMPLE_M = 0.05
+_HAZARD_PRECISION_M = 1e-4
+#: How far (cargo health) a given cargo health may lie above the cargo model's estimate.
+_CARGO_TOLERANCE = 1e-3
 
 
 def acceleration_limits(dynamics: Any) -> Dict[str, float]:
@@ -61,6 +74,51 @@ def acceleration_limits(dynamics: Any) -> Dict[str, float]:
     ``2 * sqrt(2) * a_max_xy`` per step, 34 m/s^3 with the defaults, close to the
     30 m/s^3 jerk limit of the commands."""
     return {"xy": float(np.sqrt(2.0) * dynamics.a_max_xy), "z": float(dynamics.a_max_z)}
+
+
+def hazard_run_m(hazards: Any, a: Any, b: Any, spacing_m: float = _HAZARD_SAMPLE_M,
+                 precision_m: float = _HAZARD_PRECISION_M) -> float:
+    """The longest stretch (m) of the straight motion from ``a`` to ``b`` that lies in
+    a hazard of ``hazards`` (an ``UrbanHazardModel``; its ``is_unsafe``, with the
+    clearance violations, as the geometric shield checks motion). The motion is
+    sampled every ``spacing_m`` or less, ends included, and the ends of each run of
+    samples in a hazard are located to ``precision_m`` by bisection; a gap between
+    hazards narrower than the spacing can go unseen."""
+    a = np.asarray(a, dtype=np.float32)
+    b = np.asarray(b, dtype=np.float32)
+    d = b - a
+    length = float(np.linalg.norm(d.astype(np.float64)))
+    if length == 0.0:
+        return 0.0
+    n = max(1, int(np.ceil(length / float(spacing_m))))
+
+    def unsafe(t: float) -> bool:
+        return bool(hazards.is_unsafe(a + t * d, include_clearance_violation=True))
+
+    def edge(outside: float, inside: float) -> float:
+        """The parameter in a hazard nearest to where the motion crosses into it."""
+        while abs(inside - outside) * length > precision_m:
+            middle = 0.5 * (outside + inside)
+            if unsafe(middle):
+                inside = middle
+            else:
+                outside = middle
+        return inside
+
+    flags = [unsafe(k / n) for k in range(n + 1)]
+    best, k = 0.0, 0
+    while k <= n:
+        if not flags[k]:
+            k += 1
+            continue
+        first = k
+        while k < n and flags[k + 1]:
+            k += 1
+        start = 0.0 if first == 0 else edge((first - 1) / n, first / n)
+        end = 1.0 if k == n else edge((k + 1) / n, k / n)
+        best = max(best, (end - start) * length)
+        k += 1
+    return best
 
 
 @dataclass
@@ -191,9 +249,13 @@ def score_trajectory(env: Any, seed: int, positions: Any, *, options: Optional[D
     """The episode row of one trajectory, accounted in ``env`` (:func:`trajectory_env`)
     on the mission of ``seed`` (``options``: the protocol's mission). ``positions`` is
     (n + 1, 3), starting at the mission's start (within ``start_tolerance_m``);
-    positions are taken as float32, as the environment holds them. ``cargo_health``
-    (n values in [0, 1]) replaces the estimate; ``termination``, the method's own
-    ending, is reported as ``termination_reported`` only. The row's
+    positions are taken as float32, as the environment holds them. The episode ends
+    with ``"infeasible"`` before the first step that the environment's vehicle could
+    not have flown (``infeasible``: ``"speed"``, ``"workspace"`` or ``"hazard"``).
+    ``cargo_health`` (n values in [0, 1]) is taken where it is at most the cargo
+    model's estimate (within 1e-3), the estimate elsewhere (``cargo_health_source``:
+    ``"given"``, ``"capped"`` or, without it, ``"estimated"``); ``termination``, the
+    method's own ending, is reported as ``termination_reported`` only. The row's
     ``mission_acceptable`` is the post-hoc verdict with ``budgets`` (the paper's by
     default; with dynamic risk including the dynamic budget),
     ``mission_acceptable_logged`` the environment's own."""
@@ -220,30 +282,52 @@ def score_trajectory(env: Any, seed: int, positions: Any, *, options: Optional[D
     dt = float(d.dt)
     e = env.exposure
     hazards, shield = env.hazards, env.shield
+    limit_xy, limit_z = float(d.v_max_xy) + _SPEED_TOLERANCE, float(d.v_max_z) + _SPEED_TOLERANCE
+    low = np.asarray(env.bounds_low, dtype=np.float64) - _WORKSPACE_TOLERANCE_M
+    high = np.asarray(env.bounds_high, dtype=np.float64) + _WORKSPACE_TOLERANCE_M
+    hazard_step_m = float(shield.segment_check_step_m)
     counters = ProgressCounters(best_dist_xy=env.dist_xy(start))
-    health = 1.0
+    estimate = health = 1.0
+    capped = False
     prev = start.astype(np.float64)
     prev32 = np.asarray(start, dtype=np.float32)
     vel_prev = np.zeros(3)
-    max_vxy = max_vz = max_axy = max_az = 0.0
-    hazard_segments = 0
+    max_vxy = max_vz = max_axy = max_az = max_run = 0.0
+    infeasible: Optional[str] = None
     end: Optional[str] = None
     info: Dict[str, Any] = {}
     steps = 0
     for k in range(1, len(pos)):
         p = pos[k]
-        vel = (p.astype(np.float64) - prev) / dt
+        p64 = p.astype(np.float64)
+        vel = (p64 - prev) / dt
         acc = (vel - vel_prev) / dt
-        max_vxy = max(max_vxy, float(np.hypot(vel[0], vel[1])))
-        max_vz = max(max_vz, abs(float(vel[2])))
+        speed_xy, speed_z = float(np.hypot(vel[0], vel[1])), abs(float(vel[2]))
+        max_vxy, max_vz = max(max_vxy, speed_xy), max(max_vz, speed_z)
         max_axy = max(max_axy, float(np.hypot(acc[0], acc[1])))
         max_az = max(max_az, abs(float(acc[2])))
-        # the motion of the step as the environment's geometric shield checks it
-        if not hazards.is_unsafe(prev32, include_clearance_violation=True) and \
+        # a step that the environment's vehicle could not have flown ends the episode before it
+        if speed_xy > limit_xy or speed_z > limit_z:
+            infeasible = "speed"
+        elif bool(((p64 < low) | (p64 > high)).any()):
+            infeasible = "workspace"
+        elif not hazards.is_unsafe(prev32, include_clearance_violation=True) and \
                 shield.first_hit_on_segment(prev32, p) is not None:
-            hazard_segments += 1
+            # the shield's samples find the motion in a hazard. From a safe position the environment's vehicle
+            # ends every step in a safe one (the shield samples the end of the motion too, as prev32 + 1.0 * d),
+            # and its samples, at most a sampling step apart, find every stretch through a hazard that long
+            run = hazard_run_m(hazards, prev32, p)
+            max_run = max(max_run, run)
+            if run >= hazard_step_m or hazards.is_unsafe(prev32 + (p - prev32), include_clearance_violation=True):
+                infeasible = "hazard"
+        if infeasible is not None:
+            end = "infeasible"
+            break
+        estimate = env.cargo.step(estimate, acc)[0]
         if given_cargo is None:
-            health = env.cargo.step(health, acc)[0]
+            health = estimate
+        elif given_cargo[k - 1] > estimate + _CARGO_TOLERANCE:
+            health, capped = estimate, True
         else:
             health = float(given_cargo[k - 1])
         dist = env.dist_xy(p)
@@ -318,20 +402,19 @@ def score_trajectory(env: Any, seed: int, positions: Any, *, options: Optional[D
             "mission_acceptable_static_only": row["mission_acceptable"],
         })
         row["mission_acceptable"] = dynamic_acceptability(row, budgets)
-    low = np.asarray(env.bounds_low, dtype=np.float64) - _WORKSPACE_TOLERANCE_M
-    high = np.asarray(env.bounds_high, dtype=np.float64) + _WORKSPACE_TOLERANCE_M
     limits = acceleration_limits(d)
     row.update({
         "termination_reported": termination or None,
-        "cargo_health_source": "estimated" if given_cargo is None else "given",
+        "infeasible": infeasible,
+        "cargo_health_source": "estimated" if given_cargo is None else "capped" if capped else "given",
         "positions_ignored": int(len(pos) - 1 - steps),
         "max_speed_xy_mps": max_vxy, "max_speed_z_mps": max_vz, "max_acc_xy_mps2": max_axy,
         "max_acc_z_mps2": max_az,
-        "within_speed_limits": bool(max_vxy <= d.v_max_xy + 1e-3 and max_vz <= d.v_max_z + 1e-3),
+        "within_speed_limits": bool(max_vxy <= limit_xy and max_vz <= limit_z),
         "within_acceleration_limits": bool(max_axy <= limits["xy"] + _ACCELERATION_TOLERANCE
                                            and max_az <= limits["z"] + _ACCELERATION_TOLERANCE),
-        "within_workspace": bool(((flown >= low) & (flown <= high)).all()),
-        "hazard_segment_steps": int(hazard_segments),
+        "within_workspace": infeasible != "workspace",
+        "max_hazard_run_m": max_run,
     })
     return row
 
@@ -388,9 +471,9 @@ def evaluate_trajectories(trajectories: Union[str, Path, Dict[int, Trajectory]],
     first ``n_episodes``) and summarize them as the primary evaluations are: rates,
     post-hoc acceptability with the protocol's budgets (dynamic acceptability in a
     dynamic protocol) and conditional means. The summary also counts the episodes
-    the environment's vehicle could not have flown (outside its speed limits or its
-    workspace, or with steps into a hazard), those that accelerate faster than its
-    commands can, and those with estimated cargo health.
+    ended as infeasible (``episodes_infeasible``; by reason: outside the vehicle's
+    speed limits or its workspace, or through a hazard), those that accelerate faster
+    than its commands can, and those whose cargo health was estimated or capped.
     With ``output_dir``, ``<prefix>_episodes.csv`` (with the derived columns),
     ``<prefix>_summary.json`` and ``<prefix>_config.json`` are written there; the
     default prefix is ``<label>_<protocol>``."""
@@ -412,13 +495,17 @@ def evaluate_trajectories(trajectories: Union[str, Path, Dict[int, Trajectory]],
                 "trajectories": trajectories if isinstance(trajectories, (str, Path)) else "<in memory>",
                 "scoring": "ruscuav_benchmark.trajectories.score_trajectory"}
     summary = summarize_posthoc(rows, dynamic=chosen.dynamic, budgets=chosen.budgets, dt_s=chosen.dt_s)
+    reasons = [row["infeasible"] for row in rows]
+    sources = [row["cargo_health_source"] for row in rows]
     summary.update({**jsonable(settings), "seeds": [row["seed"] for row in rows],
-                    "cargo_health_estimated": sum(row["cargo_health_source"] == "estimated" for row in rows),
-                    "episodes_outside_speed_limits": sum(not row["within_speed_limits"] for row in rows),
+                    "episodes_infeasible": sum(reason is not None for reason in reasons),
+                    "episodes_outside_speed_limits": reasons.count("speed"),
+                    "episodes_outside_workspace": reasons.count("workspace"),
+                    "episodes_through_hazards": reasons.count("hazard"),
                     "episodes_outside_acceleration_limits": sum(not row["within_acceleration_limits"]
                                                                 for row in rows),
-                    "episodes_outside_workspace": sum(not row["within_workspace"] for row in rows),
-                    "episodes_with_hazard_segments": sum(row["hazard_segment_steps"] > 0 for row in rows),
+                    "cargo_health_estimated": sources.count("estimated"),
+                    "cargo_health_capped": sources.count("capped"),
                     "finished_at": datetime.now(timezone.utc).isoformat(timespec="seconds")})
     out = TrajectoryEvaluation(label, with_derived_metrics(rows, dt_s=chosen.dt_s, budgets=chosen.budgets), summary)
     if output_dir is not None:

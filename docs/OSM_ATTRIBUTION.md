@@ -17,7 +17,8 @@ Vienna missions. They were sampled in the processed world and checked against it
 layers, so their JSON files carry the attribution above, and so does the description
 of the package's `vienna-primary` protocol, which holds the same missions
 (`src/ruscuav_benchmark/protocols/vienna-primary.json`). The worlds themselves remain
-excluded.
+excluded from the repository; the Vienna world is published apart, as a dataset under
+the ODbL with the attribution above, with the release (docs/RELEASING.md).
 
 ## Worlds you build
 

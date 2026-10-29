@@ -130,8 +130,9 @@ def _cmd_evaluate(args: argparse.Namespace) -> int:
         return 2
     s = result.summary
     keys = ["n_episodes", "success_rate", "mission_acceptability_rate", "acceptable_given_success_rate",
-            "mean_steps", "termination_counts", "cargo_health_estimated", "episodes_outside_speed_limits",
-            "episodes_outside_acceleration_limits", "episodes_outside_workspace", "episodes_with_hazard_segments"]
+            "mean_steps", "termination_counts", "episodes_infeasible", "episodes_outside_speed_limits",
+            "episodes_outside_workspace", "episodes_through_hazards", "episodes_outside_acceleration_limits",
+            "cargo_health_estimated", "cargo_health_capped"]
     regime = s["regime"]["name"] if isinstance(s.get("regime"), dict) else s.get("regime")
     out = {kind if kind != "trajectories" else "label": name, "world_id": s["world_id"], "regime": regime}
     if isinstance(s.get("protocol"), dict):
@@ -140,13 +141,19 @@ def _cmd_evaluate(args: argparse.Namespace) -> int:
     print(json.dumps({**out, **{k: s[k] for k in keys if k in s},
                       "csv_path": None if result.csv_path is None else str(result.csv_path)}, indent=2))
     if kind == "trajectories":
-        unflyable = {k: s[k] for k in ("episodes_outside_speed_limits", "episodes_outside_workspace",
-                                        "episodes_with_hazard_segments") if s.get(k)}
-        if unflyable:
-            counts = ", ".join(f"{k}: {v}" for k, v in unflyable.items())
-            print(f"note: some trajectories could not have been flown by the environment's vehicle ({counts}); "
-                  "their scores are not comparable with the environment's methods (docs/TRAJECTORIES.md)",
-                  file=sys.stderr)
+        n_infeasible = s.get("episodes_infeasible")
+        if n_infeasible:
+            counts = ", ".join(f"{k}: {s[k]}" for k in ("episodes_outside_speed_limits", "episodes_outside_workspace",
+                                                       "episodes_through_hazards") if s.get(k))
+            one = n_infeasible == 1
+            print(f"note: {n_infeasible} {'trajectory' if one else 'trajectories'} could not have been flown by the "
+                  f"environment's vehicle ({counts}); {'its mission ends' if one else 'their missions end'} as "
+                  "'infeasible', neither successful nor acceptable (docs/TRAJECTORIES.md)", file=sys.stderr)
+        n_capped = s.get("cargo_health_capped")
+        if n_capped:
+            print(f"note: {n_capped} {'trajectory gives' if n_capped == 1 else 'trajectories give'} a cargo health "
+                  "above the estimate of the environment's cargo model; the estimate is taken there "
+                  "(docs/TRAJECTORIES.md)", file=sys.stderr)
         n_fast = s.get("episodes_outside_acceleration_limits")
         if n_fast:
             print(f"note: {n_fast} {'trajectory accelerates' if n_fast == 1 else 'trajectories accelerate'} "
@@ -353,9 +360,11 @@ def _cmd_score(args: argparse.Namespace) -> int:
     from pathlib import Path
 
     from .posthoc import DT_S
-    from .scoring import PAIRED_METRICS, load_run, read_comparisons, read_registry, score_runs
+    from .scoring import (PAIRED_METRICS, check_run, load_run, missing_columns, read_comparisons, read_registry,
+                          score_runs, trajectory_checks)
     from .tables import is_missing, jsonable
 
+    notes = []
     try:
         protocol = None
         if args.protocol is not None:
@@ -363,6 +372,7 @@ def _cmd_score(args: argparse.Namespace) -> int:
 
             protocol = load_protocol(args.protocol)
         runs = read_registry(args.registry, exact_floats=args.exact_floats) if args.registry else []
+        n_registry = len(runs)
         for spec in args.runs:
             label, seed, path = _run_spec(spec)
             run = load_run(path, label, train_seed=seed, exact_floats=args.exact_floats,
@@ -378,6 +388,29 @@ def _cmd_score(args: argparse.Namespace) -> int:
                 checks.append(_check_against_protocol(run, protocol))
                 # checked: the rows' regime, where they record one, is the protocol's
                 run.dynamic, run.regime = protocol.dynamic, protocol.regime
+        # the runs given here must have every column the acceptability reads; the registry's runs are scored
+        # as the archive scored them, a missing column counting as within its budget
+        missing = {}
+        for index, run in enumerate(runs):
+            if index >= n_registry:
+                check_run(run)
+            elif missing_columns(run):
+                missing[index] = missing_columns(run)
+                notes.append(f"note: run {run.label!r} of the registry has no {', '.join(missing[index])}; a missing "
+                             "column counts as within its budget, as in the archive's tables")
+        trajectories = [trajectory_checks(run) for run in runs]
+        for run, t in zip(runs, trajectories):
+            if t and t["earlier_version"]:  # a registry's run: those given here are refused by check_run
+                notes.append(f"note: run {run.label!r}: trajectories scored by a development version of 2.1.0, "
+                             "which did not end the trajectories the vehicle could not fly; score them again "
+                             "with ruscuav evaluate --trajectories")
+            elif t and t["infeasible"]:
+                reasons = ", ".join(f"{k}: {v}" for k, v in t["infeasible_by_reason"].items())
+                notes.append(f"note: run {run.label!r}: {t['infeasible']} of its {t['episodes']} trajectories ended "
+                             f"as infeasible ({reasons}), failed missions")
+            if t and t["outside_acceleration_limits"]:
+                notes.append(f"note: run {run.label!r}: {t['outside_acceleration_limits']} trajectories accelerate "
+                             "faster than the vehicle's commands can (reported, not refused: docs/TRAJECTORIES.md)")
         comparisons = []
         for item in args.compare:
             if Path(item).is_file():
@@ -398,7 +431,9 @@ def _cmd_score(args: argparse.Namespace) -> int:
                                                        "acceptability": protocol.acceptability},
             "runs": [{"label": r.label, "train_seed": r.train_seed, "csv_path": r.source, "read_from": r.path,
                       "episodes": len(r.rows), "dynamic": r.dynamic,
-                      "sha256": _sha256(r.path) if r.path and Path(r.path).is_file() else None} for r in runs],
+                      "sha256": _sha256(r.path) if r.path and Path(r.path).is_file() else None,
+                      "missing_columns": missing.get(index, []), "trajectories": trajectories[index]}
+                     for index, r in enumerate(runs)],
             "protocol_checks": checks,
             "tables": {name: str(path) for name, path in written.items()},
             "summaries": tables.summaries,
@@ -424,6 +459,8 @@ def _cmd_score(args: argparse.Namespace) -> int:
     incomplete = [c for c in checks if not c["complete"]]
     if incomplete:
         print(f"note: {len(incomplete)} runs do not cover all missions of {protocol.name}", file=sys.stderr)
+    for note in notes:
+        print(note, file=sys.stderr)
     print(f"tables and score.json written to {args.output_dir}")
     return 0
 
@@ -685,13 +722,17 @@ def build_parser() -> argparse.ArgumentParser:
         "score", help="the paper's tables and paired tests for per-episode results",
         description="Summaries (success, post-hoc mission acceptability, conditional and normalized risk), "
                     "training-seed intervals, causes of non-acceptability, the dynamic-budget sweep and, with "
-                    "--compare, exact paired tests with Holm's correction, for per-episode CSVs (docs/SCORING.md).",
+                    "--compare, exact paired tests with Holm's correction, for per-episode CSVs (docs/SCORING.md). "
+                    "The CSVs given on the command line must have every column mission acceptability reads, and "
+                    "numbers in them for the successful episodes.",
     )
     p.add_argument("runs", nargs="*", metavar="[LABEL[@SEED]=]CSV",
                    help="per-episode CSV of one run; LABEL defaults to the rows' method, SEED is the training seed "
                         "of a learned method")
     p.add_argument("--registry", default=None,
-                   help="CSV listing runs (columns label, csv_path and optionally dynamic, train_seed, scope, regime)")
+                   help="CSV listing runs (columns label, csv_path and optionally dynamic, train_seed, scope, "
+                        "regime), scored as the archive scored them: a missing column counts as within its budget "
+                        "and is noted")
     p.add_argument("--protocol", default=None,
                    help="check that every run was evaluated under the protocol (its missions, regime and dynamic "
                         "risk, and the protocol, world or regime recorded next to the CSV) and score with its "

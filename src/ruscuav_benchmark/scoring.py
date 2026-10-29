@@ -21,11 +21,18 @@ post-processing, with the archive's arithmetic:
 Runs are dynamic when their acceptability includes the dynamic-risk budget (the
 archived dynamic evaluations; by default, runs whose rows have
 ``dynamic_cumulative_risk``). Missions are paired by the ``seed`` column.
+
+The tables read the cells as the archive's post-processing did: a missing column or
+cell counts as within its budget. :func:`check_run` refuses runs whose rows cannot
+be scored as they are (``ruscuav score`` checks the runs given on its command line
+with it), and :func:`missing_columns` names the columns the acceptability needs and
+a run lacks.
 """
 
 from __future__ import annotations
 
 import csv
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
@@ -38,11 +45,21 @@ from .stats import holm_adjust, mcnemar_exact_p, training_seed_ci
 from .tables import Row, is_missing, pandas_mean, read_rows_csv, write_rows_csv
 
 __all__ = [
-    "Run", "load_run", "read_registry", "CAUSES", "DYNAMIC_BUDGET_SWEEP", "SEED_CI_METRICS", "PAIRED_METRICS",
-    "PAPER_HOLM_COMPARISONS", "summary_row", "summary_table", "training_seed_table", "cause_rows", "cause_table",
-    "dynamic_budget_rows", "dynamic_budget_table", "paired_outcomes", "paired_test", "holm_table", "read_comparisons",
-    "ScoreTables", "score_runs",
+    "Run", "load_run", "read_registry", "ACCEPTABILITY_COLUMNS", "missing_columns", "check_run", "trajectory_checks",
+    "CAUSES", "DYNAMIC_BUDGET_SWEEP", "SEED_CI_METRICS", "PAIRED_METRICS", "PAPER_HOLM_COMPARISONS", "summary_row",
+    "summary_table", "training_seed_table", "cause_rows", "cause_table", "dynamic_budget_rows",
+    "dynamic_budget_table", "paired_outcomes", "paired_test", "holm_table", "read_comparisons", "ScoreTables",
+    "score_runs",
 ]
+
+#: Columns that mission acceptability reads, besides a count of hard violations
+#: (``urban_hard_violation_steps`` or ``hard_violation_steps``) and, in dynamic runs,
+#: ``dynamic_cumulative_risk``.
+ACCEPTABILITY_COLUMNS = ("is_success", "cargo_health", "road_time", "sidewalk_time", "building_time",
+                         "sensitive_time")
+_HARD_COLUMNS = ("urban_hard_violation_steps", "hard_violation_steps")
+#: The values ``is_success`` may have (``as_bool`` reads the first five as true).
+_BOOLEAN_TEXT = {"true", "1", "yes", "y", "t", "false", "0", "no", "n", "f"}
 
 #: Causes of non-acceptability, in the archive's order. An episode can have several.
 CAUSES = (
@@ -151,6 +168,123 @@ def read_registry(path: Union[str, Path], base: Union[str, Path, None] = None,
             train_seed=None if is_missing(seed) else float(seed), scope=str(entry.get("scope") or ""),
             regime=str(entry.get("regime") or "primary_no_terminal"), exact_floats=exact_floats, source=recorded))
     return runs
+
+
+def _columns(run: Run) -> List[str]:
+    names: List[str] = []
+    for row in run.rows:
+        names.extend(key for key in row if key not in names)
+    return names
+
+
+def _looks_dynamic(names: Iterable[str]) -> bool:
+    """Columns that only the dynamic evaluations write (``dynamic_risk_mean``,
+    ``dynamic_budget_ok``, ``mission_acceptable_static_only``, ...)."""
+    return any(name.startswith("dynamic_") or name == "mission_acceptable_static_only" for name in names)
+
+
+def missing_columns(run: Run, dynamic: Optional[bool] = None) -> List[str]:
+    """The columns mission acceptability reads that the run's rows do not have:
+    :data:`ACCEPTABILITY_COLUMNS`, a count of hard violations and, for a dynamic run
+    (``dynamic``, default the run's own flag, or rows with columns of the dynamic
+    evaluations), ``dynamic_cumulative_risk``. The tables count a missing column as
+    within its budget, as the archive's post-processing did."""
+    names = set(_columns(run))
+    missing = [key for key in ACCEPTABILITY_COLUMNS if key not in names]
+    if not names & set(_HARD_COLUMNS):
+        missing.append(_HARD_COLUMNS[0])
+    dynamic = (run.dynamic or _looks_dynamic(names)) if dynamic is None else dynamic
+    if dynamic and "dynamic_cumulative_risk" not in names:
+        missing.append("dynamic_cumulative_risk")
+    return missing
+
+
+def _is_boolean(value: Any) -> bool:
+    if isinstance(value, (bool, np.bool_)):
+        return True
+    if isinstance(value, (int, np.integer)):
+        return int(value) in (0, 1)
+    return isinstance(value, str) and value.strip().lower() in _BOOLEAN_TEXT
+
+
+def _finite(value: Any) -> Optional[float]:
+    if value is None or isinstance(value, (bool, np.bool_)):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def check_run(run: Run, dynamic: Optional[bool] = None) -> None:
+    """Refuse (``ValueError``) a run whose rows the tables cannot score as they are:
+    a column of :func:`missing_columns` is absent (``dynamic_cumulative_risk`` also
+    when other columns of the dynamic evaluations are there: a misspelled column
+    would drop the dynamic budget); an ``is_success`` is not true or false
+    (``True``/``False``, ``1``/``0``, ``yes``/``no``, ...); a successful episode has no
+    finite number in a column the acceptability reads, a cargo health outside 0 to 1,
+    or a negative time or count; or the rows are scored trajectories without the
+    ``infeasible`` column, scored by a development version of 2.1.0 that did not end
+    infeasible trajectories (score the trajectories again)."""
+    what = f"run {run.label!r}"
+    missing = missing_columns(run, dynamic)
+    if missing:
+        raise ValueError(f"{what} has no column {', '.join(missing)}: mission acceptability needs "
+                         f"{', '.join(ACCEPTABILITY_COLUMNS)}, a count of hard violations "
+                         f"({' or '.join(_HARD_COLUMNS)}) and, when dynamic, dynamic_cumulative_risk "
+                         "(docs/SCORING.md)")
+    columns = _columns(run)
+    if _stale_trajectories(columns):
+        raise ValueError(f"{what}: trajectories scored by a development version of 2.1.0, which did not end the "
+                         "trajectories the vehicle could not fly; score them again with ruscuav evaluate "
+                         "--trajectories")
+    dynamic = (run.dynamic or _looks_dynamic(columns)) if dynamic is None else dynamic
+    for row in run.rows:
+        where = f"{what}, seed {row.get('seed')}"
+        if not _is_boolean(row.get("is_success")):
+            raise ValueError(f"{where}: is_success {row.get('is_success')!r} is not true or false")
+        if not as_bool(row.get("is_success")):
+            continue
+        keys = list(ACCEPTABILITY_COLUMNS[1:]) + [_hard_key(row)] + (["dynamic_cumulative_risk"] if dynamic else [])
+        values = {key: _finite(row.get(key)) for key in keys}
+        empty = [key for key, value in values.items() if value is None]
+        if empty:
+            raise ValueError(f"{where}: a successful episode without a number in {', '.join(empty)}")
+        if not 0.0 <= values["cargo_health"] <= 1.0:
+            raise ValueError(f"{where}: cargo health {values['cargo_health']!r} is not from 0 to 1")
+        negative = [key for key, value in values.items() if key != "cargo_health" and value < 0.0]
+        if negative:
+            raise ValueError(f"{where}: negative {', '.join(negative)}")
+
+
+def _stale_trajectories(columns: Iterable[str]) -> bool:
+    """Rows of scored trajectories without the ``infeasible`` column: a development
+    version of 2.1.0 scored them, which did not end infeasible trajectories."""
+    columns = set(columns)
+    return "cargo_health_source" in columns and "infeasible" not in columns
+
+
+def trajectory_checks(run: Run) -> Optional[Dict[str, Any]]:
+    """For a run of scored trajectories (rows with ``cargo_health_source``, as
+    ``ruscuav evaluate --trajectories`` writes them), the episodes ended as infeasible,
+    by reason, those outside the acceleration limits and the sources of the cargo
+    health, and whether a development version of 2.1.0 scored them
+    (``earlier_version``: its rows have no ``infeasible`` column, and their counts of
+    infeasible episodes mean nothing); None for other runs."""
+    rows = [row for row in run.rows if not is_missing(row.get("cargo_health_source"))]
+    if not rows:
+        return None
+    reasons = [str(row.get("infeasible")) for row in rows if not is_missing(row.get("infeasible"))]
+    sources = [str(row["cargo_health_source"]) for row in rows]
+    return {
+        "episodes": len(rows),
+        "earlier_version": _stale_trajectories(_columns(run)),
+        "infeasible": len(reasons),
+        "infeasible_by_reason": {reason: reasons.count(reason) for reason in sorted(set(reasons))},
+        "outside_acceleration_limits": sum(not as_bool(row.get("within_acceleration_limits")) for row in rows),
+        "cargo_health": {source: sources.count(source) for source in sorted(set(sources))},
+    }
 
 
 def summary_row(run: Run, budgets: Optional[Mapping[str, float]] = None, dt_s: float = DT_S) -> Row:

@@ -31,8 +31,10 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Dict, Optional, Tuple, Union
 
+from ..posthoc import DEFAULT_BUDGETS
 from ..risk import RISK_PROFILES, UrbanRiskProfile
 from .dynamic_risk import REPORTED_DYNAMIC_CONFIG, DynamicRiskConfig
+
 
 def _require(condition: bool, message: str) -> None:
     if not condition:
@@ -266,13 +268,15 @@ class EpisodeConfig:
 
 @dataclass(frozen=True)
 class MissionConfig:
-    """Mission-acceptability budgets, operational-stopping budgets and safe endpoints."""
+    """Mission-acceptability budgets (by default the paper's,
+    ``ruscuav_benchmark.posthoc.DEFAULT_BUDGETS``), operational-stopping budgets and
+    safe endpoints."""
 
-    accept_cargo_min: float = 0.80
-    accept_road_s: float = 20.0
-    accept_sidewalk_s: float = 5.0
-    accept_building_s: float = 15.0
-    accept_sensitive_s: float = 0.0
+    accept_cargo_min: float = DEFAULT_BUDGETS["cargo_min"]
+    accept_road_s: float = DEFAULT_BUDGETS["road_s"]
+    accept_sidewalk_s: float = DEFAULT_BUDGETS["ped_s"]
+    accept_building_s: float = DEFAULT_BUDGETS["building_s"]
+    accept_sensitive_s: float = DEFAULT_BUDGETS["sensitive_s"]
     terminal_road_s: float = 30.0
     terminal_sidewalk_s: float = 10.0
     terminal_building_s: float = 20.0

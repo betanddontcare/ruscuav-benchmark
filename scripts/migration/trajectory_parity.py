@@ -13,12 +13,13 @@ its flown paths saved. Two comparisons follow:
    difference and any acceptability verdict it changes are reported), and the
    endings of the method's own that positions do not show (the action shield's
    shield-stuck, a planner without a path): they end as "ended". None of the
-   episodes may leave the speed limits or the workspace. Steps counted as moving
-   into a hazard are reported: on a step that the environment's geometric shield
-   shortened, the samples of the shortened segment can find a hazard sliver that
-   the shield's samples along the commanded segment skipped. So are episodes
-   outside the acceleration limits: the geometric shield stops or shortens a step
-   at once, faster than the vehicle's commands can.
+   episodes may end as infeasible (faster than the speed limits, outside the
+   workspace, or through a hazard over the shield's 1 m). The longest stretch of a
+   step through a hazard is reported: on a step that the environment's geometric
+   shield shortened, the shortened segment can cross a hazard sliver, thinner than
+   the shield's spacing, that its samples along the commanded segment skipped. So
+   are the episodes outside the acceleration limits: the geometric shield stops or
+   shortens a step at once, faster than the vehicle's commands can.
 
 Cases: the static, local and full receding-horizon A* in canonical-primary, the
 dynamic planner in canonical-dynamic, the full planner in canonical-secondary (no
@@ -120,14 +121,16 @@ def compare_with_archive(rows: List[Dict[str, Any]], archived: List[Dict[str, An
 def compare_scored(flown: List[Dict[str, Any]], scored: List[Dict[str, Any]]) -> Dict[str, Any]:
     out: Dict[str, Any] = {"rows": len(flown), "identical_apart_from_cargo": 0, "cargo_max_abs_diff": 0.0,
                            "acceptability_changed_by_cargo": 0, "other_differences": {}, "endings": {},
-                           "unflyable": {"outside_speed_limits": 0, "outside_acceleration_limits": 0,
-                                         "outside_workspace": 0, "hazard_segments": 0}}
+                           "unflyable": {"infeasible": {}, "outside_acceleration_limits": 0,
+                                         "episodes_with_hazard_slivers": 0, "longest_hazard_stretch_m": 0.0}}
     for a, b in zip(flown, scored):
         assert a["seed"] == b["seed"]
-        out["unflyable"]["outside_speed_limits"] += not b["within_speed_limits"]
-        out["unflyable"]["outside_acceleration_limits"] += not b["within_acceleration_limits"]
-        out["unflyable"]["outside_workspace"] += not b["within_workspace"]
-        out["unflyable"]["hazard_segments"] += b["hazard_segment_steps"] > 0
+        unflyable = out["unflyable"]
+        if b["infeasible"] is not None:
+            unflyable["infeasible"][b["infeasible"]] = unflyable["infeasible"].get(b["infeasible"], 0) + 1
+        unflyable["outside_acceleration_limits"] += not b["within_acceleration_limits"]
+        unflyable["episodes_with_hazard_slivers"] += b["max_hazard_run_m"] > 0.0
+        unflyable["longest_hazard_stretch_m"] = max(unflyable["longest_hazard_stretch_m"], b["max_hazard_run_m"])
         diffs = [c for c in a if c in b and c not in _NOT_SCORED and not _same(a[c], b[c])]
         if "cargo_health" in diffs:
             if _missing(a["cargo_health"]) or _missing(b["cargo_health"]):
@@ -219,8 +222,7 @@ def main() -> int:
                                            and not k.startswith("urban_"))]
 
     bad = [c for c, e in report["cases"].items() if e["trajectories"]["other_differences"]
-           or unexpected(e["trajectories"]["endings"]) or e["trajectories"]["unflyable"]["outside_speed_limits"]
-           or e["trajectories"]["unflyable"]["outside_workspace"]]
+           or unexpected(e["trajectories"]["endings"]) or e["trajectories"]["unflyable"]["infeasible"]]
     print(f"{len(report['cases'])} cases; report: {out}" + (f"; unexpected differences in {bad}" if bad else ""))
     return 1 if bad else 0
 

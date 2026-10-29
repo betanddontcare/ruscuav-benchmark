@@ -23,7 +23,8 @@ jobs:
   tests:
     # base: worlds, validation, protocols, scoring; env: the environment, planners and
     # trajectory scoring; gis: worlds from OpenStreetMap. Tests that need the Zenodo
-    # archive (RUSCUAV_ARCHIVE) or Stable-Baselines3 are skipped.
+    # archive (RUSCUAV_ARCHIVE) are skipped, and those that need Stable-Baselines3 are
+    # left to the rl job.
     name: ${{ matrix.set }} / Python ${{ matrix.python }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -80,6 +81,25 @@ jobs:
           assert len(runs[0]) == 2 and runs[0] == runs[1], runs
           print("the flown and the re-scored rows agree:", runs[0])
           EOF
+
+  rl:
+    # the Stable-Baselines3 policies, whose tests the jobs above skip: checkpoints of the
+    # five algorithms and training (tests/test_policy_training.py), with the other policy
+    # tests; PyTorch from its CPU index (the PyPI wheels bring the CUDA libraries)
+    name: rl / Python 3.12
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - run: python -m pip install ".[env,rl,test]"
+      - run: python -m pytest -q -ra tests/test_policy_training.py tests/test_policy_episodes.py tests/test_policies.py
 
   minimum-versions:
     # the lowest versions pyproject.toml allows for the base package
