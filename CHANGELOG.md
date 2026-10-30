@@ -269,6 +269,11 @@
   of its Zenodo record, 10.5281/zenodo.21331402 (`pyproject.toml`, `codemeta.json`,
   `.zenodo.json`, README.md, docs/SOFTWAREX_CODE_METADATA.md), in place of that of
   v1.0.0.
+- The SoftwareX article's Example 2 is in Berlin, Alt-Treptow and Treptower Park
+  (examples/softwarex/README.md; `figures.sh` draws its mission 9035). Its world is
+  published apart with the Vienna world, as one dataset under the ODbL, with the
+  OpenStreetMap extract it was built from (README.md, docs/OSM_ATTRIBUTION.md,
+  docs/RELEASING.md, codemeta.json).
 
 ## 2.0.0 — 2026-07-24
 

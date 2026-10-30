@@ -17,8 +17,10 @@ Vienna missions. They were sampled in the processed world and checked against it
 layers, so their JSON files carry the attribution above, and so does the description
 of the package's `vienna-primary` protocol, which holds the same missions
 (`src/ruscuav_benchmark/protocols/vienna-primary.json`). The worlds themselves remain
-excluded from the repository; the Vienna world is published apart, as a dataset under
-the ODbL with the attribution above, with the release (docs/RELEASING.md).
+excluded from the repository; the Vienna world and the Berlin world of the SoftwareX
+article's Example 2, with the OpenStreetMap extract the Berlin world was built from, are
+published apart, as one dataset under the ODbL with the attribution above, with the
+release (docs/RELEASING.md).
 
 ## Worlds you build
 

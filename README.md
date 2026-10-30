@@ -181,10 +181,11 @@ sha256sum -c SHA256SUMS
 
 ## Real-GIS worlds and OpenStreetMap
 
-The processed Vienna and Warsaw worlds are not in this repository. The Vienna world
-of the paper's evaluations is published apart, as a dataset under the ODbL, with the
-release (docs/RELEASING.md); the Warsaw footway-only world of the archived runs was
-never saved. `ruscuav build-aoi --preset vienna` (or `warsaw`) builds a world of the
+The processed real-GIS worlds (Vienna, Warsaw, Berlin) are not in this repository. The
+Vienna world of the paper's evaluations and the Berlin world of the SoftwareX article's
+Example 2 (examples/softwarex/README.md) are published apart, as one dataset under the
+ODbL, with the release (docs/RELEASING.md); the Warsaw footway-only world of the
+archived runs was never saved. `ruscuav build-aoi --preset vienna` (or `warsaw`) builds a world of the
 same area from OpenStreetMap data, and `scenarios/real_gis/` records the missions and
 the layers checksum of the paper's Vienna world (docs/BUILDING_WORLDS.md,
 worlds/real_gis/README.md). OpenStreetMap data are © OpenStreetMap contributors under
