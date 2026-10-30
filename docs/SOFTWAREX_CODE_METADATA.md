@@ -16,5 +16,6 @@ link of C2 is added when the repository is published (docs/RELEASING.md).
 | C9 | Support email for questions | igor.betkier@wat.edu.pl |
 
 The archived evaluations, trained weights and paper-ready tables of the associated
-manuscript are the RUSCUAV v2.0.0 archive on Zenodo, a version of the record of
-v1.0.0 (10.5281/zenodo.21331403).
+manuscript are the RUSCUAV v2.0.0 archive on Zenodo,
+https://doi.org/10.5281/zenodo.21331402 (the DOI of all versions of the record;
+v1.0.0 is 10.5281/zenodo.21331403).

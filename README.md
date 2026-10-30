@@ -164,8 +164,9 @@ examples/                a quickstart script; softwarex/: the examples of the So
 
 ### The Zenodo archive
 
-The RUSCUAV v2.0.0 archive on Zenodo (a new version of the record of v1.0.0,
-10.5281/zenodo.21331403) holds what the repository does not: the per-episode CSVs and summaries of the
+The RUSCUAV v2.0.0 archive on Zenodo (https://doi.org/10.5281/zenodo.21331402, the DOI
+of all versions of the record; v1.0.0 is 10.5281/zenodo.21331403) holds what the
+repository does not: the per-episode CSVs and summaries of the
 evaluations and the trained weights (`experiments/`; `models/` lists the weights and
 holds the Vienna fine-tuning checkpoints), the paper-ready tables, JSON and figures
 (`paper_ready_v2/`),

@@ -265,7 +265,10 @@
   `zenodo_metadata.json` is in the v2.0.0 archive. The processed Vienna world of the
   paper's evaluations is to be published apart, as a dataset under the ODbL, with the
   release (docs/RELEASING.md); README.md, docs/OSM_ATTRIBUTION.md, codemeta.json and
-  examples/softwarex/README.md say so.
+  examples/softwarex/README.md say so. The archive is cited by the DOI of all versions
+  of its Zenodo record, 10.5281/zenodo.21331402 (`pyproject.toml`, `codemeta.json`,
+  `.zenodo.json`, README.md, docs/SOFTWAREX_CODE_METADATA.md), in place of that of
+  v1.0.0.
 
 ## 2.0.0 — 2026-07-24
 
