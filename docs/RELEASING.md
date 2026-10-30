@@ -1,8 +1,7 @@
 # Releasing a version
 
-The steps of a release of the package, from 2.1.0 on. Version 2.1.0 is prepared in
-the repository but not released: its date, repository URL and DOI are added by these
-steps.
+The steps of a release of the package, from 2.1.0 on. Version 2.1.0 was released on
+2026-10-30 by these steps.
 
 1. **Content.** Confirm that no third-party restricted data, trained weights or
    real-GIS layers with incompatible terms have been added. The processed real-GIS

@@ -14,7 +14,9 @@ authors:
     affiliation: "Faculty of Civil Engineering and Geodesy, Military University of Technology, gen. Sylwestra Kaliskiego Street 2, 00-908 Warsaw, Poland"
     email: "mateusz.oszczypala@wat.edu.pl"
 version: "2.1.0"
+date-released: "2026-10-30"
 license: MIT
+repository-code: "https://github.com/betanddontcare/ruscuav-benchmark"
 keywords:
   - unmanned aerial vehicle
   - urban cargo-UAV navigation

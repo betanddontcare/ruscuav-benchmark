@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.1.0 (unreleased)
+## 2.1.0 — 2026-10-30
 
 - Legacy notebook code runs outside Colab: `ruscuav_benchmark.legacy.runtime` and
   `scripts/legacy_parity.py`, which reproduces archived primary episodes
