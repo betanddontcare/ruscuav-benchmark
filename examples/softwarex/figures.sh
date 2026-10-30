@@ -5,13 +5,13 @@
 #     bash examples/softwarex/figures.sh CITY_WORLD.npz [MISSION [TITLE]]
 #
 # CITY_WORLD is the world of Example 2 (runs/softwarex/city/world.npz when example2.sh built it); MISSION is the
-# seed of the mission of panel (b), 9042 in the paper's Vienna world (choose another for another city). Writes
+# seed of the mission of panel (b), 9035 in the paper's Berlin world (choose another for another city). Writes
 # runs/softwarex/fig2_paths.png, .pdf and runs/softwarex/fig3_data.csv.
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 CITY=${1:?give the world of Example 2}
-MISSION=${2:-9042}
-TITLE=${3:-"(b) Vienna, Prater–Leopoldstadt, mission $MISSION"}
+MISSION=${2:-9035}
+TITLE=${3:-"(b) Berlin, Alt-Treptow–Treptower Park, mission $MISSION"}
 OUT=runs/softwarex
 target() {  # the target of a mission of a protocol, as X,Y
   python -c "import sys
