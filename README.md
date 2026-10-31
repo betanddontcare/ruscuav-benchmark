@@ -9,6 +9,8 @@ manuscript
 > **RUSCUAV: A Semantic Mission-Acceptability Benchmark for Low-Altitude Urban Cargo UAV Navigation**
 >
 > Igor Betkier and Mateusz Oszczypała
+>
+> Preprint: https://doi.org/10.13140/RG.2.2.24922.30400
 
 whose evaluations, trained weights and paper-ready tables are archived on Zenodo
 (RUSCUAV v2.0.0, see "The Zenodo archive" below). The package reproduces them and

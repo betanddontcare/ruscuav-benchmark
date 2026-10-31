@@ -38,3 +38,15 @@ abstract: >-
   paper, evaluation protocols with fixed missions, scoring of any method's
   trajectories, the paper's statistics, and a builder of worlds from OpenStreetMap
   data. The code is MIT-licensed; data, worlds and documentation are CC BY 4.0.
+references:
+  - type: article
+    title: "RUSCUAV: A Semantic Mission-Acceptability Benchmark for Low-Altitude Urban Cargo UAV Navigation"
+    authors:
+      - family-names: Betkier
+        given-names: Igor
+      - family-names: Oszczypała
+        given-names: Mateusz
+    status: preprint
+    year: 2026
+    doi: "10.13140/RG.2.2.24922.30400"
+    notes: "Submitted to Expert Systems with Applications."
