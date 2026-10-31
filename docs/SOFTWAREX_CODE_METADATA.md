@@ -6,7 +6,7 @@ links the repository and its 2.1.0 release (docs/RELEASING.md).
 | Nr. | Code metadata description | |
 |---|---|---|
 | C1 | Current code version | 2.1.0 |
-| C2 | Permanent link to code/repository used for this code version | https://github.com/betanddontcare/ruscuav-benchmark (release v2.1.0; its Zenodo DOI is added when the release is archived) |
+| C2 | Permanent link to code/repository used for this code version | https://github.com/betanddontcare/ruscuav-benchmark (release v2.1.0); https://doi.org/10.5281/zenodo.23825176 |
 | C3 | Permanent link to reproducible capsule | none |
 | C4 | Legal code license | MIT (code); CC BY 4.0 (data and documentation; `LICENSE_DATA_AND_ASSETS.md`) |
 | C5 | Code versioning system used | git |

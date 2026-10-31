@@ -15,6 +15,7 @@ authors:
     email: "mateusz.oszczypala@wat.edu.pl"
 version: "2.1.0"
 date-released: "2026-10-30"
+doi: "10.5281/zenodo.23825176"
 license: MIT
 repository-code: "https://github.com/betanddontcare/ruscuav-benchmark"
 keywords:

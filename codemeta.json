@@ -2,7 +2,7 @@
   "@context": "https://doi.org/10.5063/schema/codemeta-2.0",
   "@type": "SoftwareSourceCode",
   "name": "RUSCUAV",
-  "identifier": "ruscuav-benchmark",
+  "identifier": "https://doi.org/10.5281/zenodo.23825176",
   "version": "2.1.0",
   "description": "RUSCUAV is a benchmark for low-altitude urban cargo-UAV navigation that scores missions by semantic mission acceptability as well as by target-reaching success. The ruscuav-benchmark package provides validated world files, a Gymnasium environment, the risk-cost A* planners and PPO policies of the paper, evaluation protocols with fixed missions, scoring of any method's trajectories, the paper's statistics, and a builder of worlds from OpenStreetMap data. The archived evaluations, trained weights and paper-ready tables are in the Zenodo record; processed real-GIS worlds are not in the repository (the Vienna world of the paper and the Berlin world of the SoftwareX article's Example 2 are published apart under the ODbL).",
   "programmingLanguage": "Python",

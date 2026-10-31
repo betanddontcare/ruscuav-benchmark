@@ -221,5 +221,6 @@ Faculty of Civil Engineering and Geodesy, Military University of Technology, gen
 ## Citation
 
 Cite the associated manuscript and the version of the software you used;
-`CITATION.cff` and `codemeta.json` hold the machine-readable metadata. The changes of
-each version are in `CHANGELOG.md`.
+`CITATION.cff` and `codemeta.json` hold the machine-readable metadata. Version 2.1.0 is
+archived on Zenodo, https://doi.org/10.5281/zenodo.23825176. The changes of each
+version are in `CHANGELOG.md`.
